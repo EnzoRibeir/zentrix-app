@@ -12,7 +12,7 @@
  * Recebe a transação via navigation params.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { CORES, CORES_SEMANTICAS } from '../constantes/cores';
@@ -21,6 +21,7 @@ import { ESPACAMENTOS } from '../constantes/espacamentos';
 import { obterCategoria, CORES_TIPO_PAGAMENTO } from '../constantes/categorias';
 import { formatarMoeda, formatarDataHora } from '../utilitarios/formatadores';
 import { useTransacoes } from '../contextos/TransacoesContexto';
+import ModalEditarTransacao from '../componentes/ModalEditarTransacao';
 
 /**
  * Tela de detalhes de uma transação individual.
@@ -29,7 +30,9 @@ import { useTransacoes } from '../contextos/TransacoesContexto';
  * @param {object} navigation - Navegação do React Navigation
  */
 const TelaDetalhesTransacao = ({ route, navigation }) => {
-  const { transacao } = route.params;
+  const { transacao: transacaoRoute } = route.params;
+  const [transacao, setTransacao] = useState(transacaoRoute);
+  const [modalEditVisivel, setModalEditVisivel] = useState(false);
   const { remover } = useTransacoes();
 
   const categoria = obterCategoria(transacao.category);
@@ -198,7 +201,10 @@ const TelaDetalhesTransacao = ({ route, navigation }) => {
       {/* ============================================ */}
       {/* BOTÕES DE AÇÃO */}
       {/* ============================================ */}
-      <TouchableOpacity style={estilos.botaoEditar}>
+      <TouchableOpacity 
+        style={estilos.botaoEditar}
+        onPress={() => setModalEditVisivel(true)}
+      >
         <Feather name="edit-2" size={18} color={CORES.principal} />
         <Text style={estilos.botaoEditarTexto}>Editar transação</Text>
       </TouchableOpacity>
@@ -212,6 +218,17 @@ const TelaDetalhesTransacao = ({ route, navigation }) => {
         <Feather name="share" size={18} color={CORES.secundaria} />
         <Text style={estilos.botaoCompartilharTexto}>Compartilhar comprovante</Text>
       </TouchableOpacity>
+
+      <ModalEditarTransacao
+        visivel={modalEditVisivel}
+        aoFechar={(novosCampos) => {
+          setModalEditVisivel(false);
+          if (novosCampos) {
+            setTransacao({ ...transacao, ...novosCampos });
+          }
+        }}
+        transacao={transacao}
+      />
     </ScrollView>
   );
 };

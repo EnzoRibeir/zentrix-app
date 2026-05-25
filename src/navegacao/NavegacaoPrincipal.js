@@ -38,6 +38,7 @@ import TelaRelatorios from '../telas/TelaRelatorios';
 import TelaPerfil from '../telas/TelaPerfil';
 import TelaDetalhesTransacao from '../telas/TelaDetalhesTransacao';
 import TelaNotificacoes from '../telas/TelaNotificacoes';
+import TelaCategorias from '../telas/TelaCategorias';
 
 // Componentes
 import ModalNovaTransacao from '../componentes/ModalNovaTransacao';
@@ -212,6 +213,12 @@ const NavegacaoPrincipal = () => {
         <Stack.Screen
           name="Notificacoes"
           component={TelaNotificacoes}
+          options={{ animation: 'slide_from_right' }}
+        />
+        {/* Categorias (Substitui A Receber) */}
+        <Stack.Screen
+          name="Categorias"
+          component={TelaCategorias}
           options={{ animation: 'slide_from_right' }}
         />
       </Stack.Navigator>

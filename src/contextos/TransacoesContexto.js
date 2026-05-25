@@ -16,7 +16,7 @@
  */
 
 import React, { createContext, useContext, useReducer, useCallback } from 'react';
-import { buscarTransacoes, criarTransacaoPorFrase, excluirTransacao } from '../servicos/api';
+import { buscarTransacoes, criarTransacaoPorFrase, excluirTransacao, atualizarTransacao } from '../servicos/api';
 
 // ===========================================
 // TIPOS DE AÇÃO DO REDUCER
@@ -43,6 +43,8 @@ const ACOES = {
 const estadoInicial = {
   /** Lista de transações carregadas da API */
   transacoes: [],
+  /** Dados do usuário carregados da API */
+  usuario: null,
   /** Indica se está carregando dados (exibir spinner) */
   carregando: false,
   /** Mensagem de erro caso a requisição falhe */
@@ -63,7 +65,13 @@ const transacoesReducer = (estado, acao) => {
       return { ...estado, carregando: true, erro: null };
 
     case ACOES.CARREGAR_SUCESSO:
-      return { ...estado, transacoes: acao.payload, carregando: false, erro: null };
+      return { 
+        ...estado, 
+        transacoes: acao.payload.transacoes, 
+        usuario: acao.payload.usuario,
+        carregando: false, 
+        erro: null 
+      };
 
     case ACOES.DEFINIR_ERRO:
       return { ...estado, carregando: false, erro: acao.payload };
@@ -160,14 +168,27 @@ export const TransacoesProvider = ({ children }) => {
     }
   }, [carregar]);
 
+  const atualizar = useCallback(async (id, campos) => {
+    try {
+      await atualizarTransacao(id, campos);
+      await carregar(); // recarrega a lista para pegar o novo status
+      return true;
+    } catch (erro) {
+      despachar({ type: ACOES.DEFINIR_ERRO, payload: 'Erro ao atualizar transação' });
+      return false;
+    }
+  }, [carregar]);
+
   /** Valor exposto pelo contexto para todos os componentes filhos */
   const valor = {
     transacoes: estado.transacoes,
+    usuario: estado.usuario,
     carregando: estado.carregando,
     erro: estado.erro,
     carregar,
     adicionar,
     remover,
+    atualizar,
   };
 
   return (

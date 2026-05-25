@@ -13,7 +13,7 @@
  */
 
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import Svg, { Circle, G } from 'react-native-svg';
 import { CORES } from '../constantes/cores';
 import { TIPOGRAFIA } from '../constantes/tipografia';
@@ -33,9 +33,10 @@ import { formatarMoeda } from '../utilitarios/formatadores';
  *     { nome: "Rangos", valor: 500, porcentagem: 57, cor: "#27AE60" },
  *   ]}
  *   total={880}
+ *   aoClicarCategoria={(nome) => console.log(nome)}
  * />
  */
-const GraficoCategorias = ({ dados, total }) => {
+const GraficoCategorias = ({ dados, total, aoClicarCategoria }) => {
   // Configurações do SVG
   const tamanho = 160;
   const raio = 60;
@@ -88,7 +89,12 @@ const GraficoCategorias = ({ dados, total }) => {
       {/* Legenda lateral */}
       <View style={estilos.containerLegenda}>
         {dados.map((item, indice) => (
-          <View key={indice} style={estilos.itemLegenda}>
+          <TouchableOpacity 
+            key={indice} 
+            style={estilos.itemLegenda}
+            onPress={() => aoClicarCategoria && aoClicarCategoria(item.nome)}
+            activeOpacity={aoClicarCategoria ? 0.7 : 1}
+          >
             {/* Bolinha colorida */}
             <View style={[estilos.bolinhaLegenda, { backgroundColor: item.cor }]} />
             {/* Nome da categoria */}
@@ -97,7 +103,7 @@ const GraficoCategorias = ({ dados, total }) => {
             <Text style={estilos.valorLegenda}>{formatarMoeda(item.valor)}</Text>
             {/* Porcentagem */}
             <Text style={estilos.porcentagemLegenda}>{Math.round(item.porcentagem)}%</Text>
-          </View>
+          </TouchableOpacity>
         ))}
       </View>
     </View>

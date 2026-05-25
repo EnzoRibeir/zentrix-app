@@ -36,8 +36,8 @@ import GraficoCategorias from '../componentes/GraficoCategorias';
 import ItemTransacao from '../componentes/ItemTransacao';
 import CarregandoIndicador from '../componentes/CarregandoIndicador';
 
-/** Limite mensal padrão (TODO: futuramente virá do backend/perfil) */
-const LIMITE_MENSAL = 1000;
+/** Limite mensal padrão (usado caso não exista no perfil) */
+const LIMITE_PADRAO = 1000;
 
 /**
  * Tela Inicial (Home) do app.
@@ -46,7 +46,7 @@ const LIMITE_MENSAL = 1000;
  * @param {object} navigation - Navegação do React Navigation
  */
 const TelaInicial = ({ navigation }) => {
-  const { transacoes, carregando, carregar } = useTransacoes();
+  const { transacoes, usuario, carregando, carregar } = useTransacoes();
   const [atualizando, setAtualizando] = useState(false);
 
   /** Carrega transações ao montar a tela */
@@ -62,9 +62,10 @@ const TelaInicial = ({ navigation }) => {
   };
 
   // Cálculos derivados dos dados
+  const limiteReal = usuario?.limite_mensal || LIMITE_PADRAO;
   const totalGasto = calcularTotalGasto(transacoes);
-  const disponivel = LIMITE_MENSAL - totalGasto;
-  const porcentagemUsada = (totalGasto / LIMITE_MENSAL) * 100;
+  const disponivel = limiteReal - totalGasto;
+  const porcentagemUsada = (totalGasto / limiteReal) * 100;
   const gastosPorCategoria = calcularGastosPorCategoria(transacoes);
   const ultimasTransacoes = transacoes.slice(0, 5); // Mostra apenas as 5 mais recentes
 
@@ -122,7 +123,7 @@ const TelaInicial = ({ navigation }) => {
             Disponível: {formatarMoeda(Math.max(0, disponivel))}
           </Text>
           <Text style={estilos.cardRodapeTexto}>
-            Limite: {formatarMoeda(LIMITE_MENSAL)}
+            Limite: {formatarMoeda(limiteReal)}
           </Text>
         </View>
       </View>
@@ -134,10 +135,14 @@ const TelaInicial = ({ navigation }) => {
         <View style={estilos.secao}>
           <View style={estilos.secaoHeader}>
             <Text style={estilos.secaoTitulo}>Gastos por Categoria</Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Categorias')}>
+              <Text style={estilos.verTodas}>Ver Categorias</Text>
+            </TouchableOpacity>
           </View>
           <GraficoCategorias
             dados={gastosPorCategoria}
             total={totalGasto}
+            aoClicarCategoria={(nomeCat) => navigation.navigate('Categorias', { categoriaInicial: nomeCat })}
           />
         </View>
       )}

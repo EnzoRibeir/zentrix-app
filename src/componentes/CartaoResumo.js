@@ -12,7 +12,7 @@
  */
 
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { CORES } from '../constantes/cores';
 import { TIPOGRAFIA } from '../constantes/tipografia';
@@ -26,12 +26,15 @@ import { ESPACAMENTOS } from '../constantes/espacamentos';
  * @param {string} valor - Valor formatado (ex: "R$ 235,01")
  * @param {string} corValor - Cor do texto do valor (padrão: textoPrincipal)
  * @param {string} corIcone - Cor do ícone e seu fundo (padrão: principal)
+ * @param {function} onPress - Função ao clicar no card
  */
-const CartaoResumo = ({ icone, label, valor, corValor, corIcone }) => {
+const CartaoResumo = ({ icone, label, valor, corValor, corIcone, onPress }) => {
   const corDoIcone = corIcone || CORES.principal;
 
+  const Wrapper = onPress ? TouchableOpacity : View;
+
   return (
-    <View style={estilos.container}>
+    <Wrapper style={estilos.container} onPress={onPress} activeOpacity={0.7}>
       {/* Ícone circular com fundo colorido */}
       <View style={[estilos.containerIcone, { backgroundColor: `${corDoIcone}15` }]}>
         <Feather name={icone} size={22} color={corDoIcone} />
@@ -42,7 +45,7 @@ const CartaoResumo = ({ icone, label, valor, corValor, corIcone }) => {
         <Text style={estilos.label}>{label}</Text>
         <Text style={[estilos.valor, corValor && { color: corValor }]}>{valor}</Text>
       </View>
-    </View>
+    </Wrapper>
   );
 };
 

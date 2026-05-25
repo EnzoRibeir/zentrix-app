@@ -114,11 +114,19 @@ export const buscarTransacoes = async () => {
     const dados = await resposta.json();
 
     // A API pode retornar o body como string JSON (duplo encode do Lambda)
+    let jsonDados = dados;
     if (typeof dados === 'string') {
-      return JSON.parse(dados);
+      jsonDados = JSON.parse(dados);
     }
 
-    return dados;
+    // Compatibilidade v4 (array direto) vs v5 ({ transacoes: [], usuario: {} })
+    if (Array.isArray(jsonDados)) {
+      return { transacoes: jsonDados, usuario: null };
+    }
+    return { 
+      transacoes: jsonDados.transacoes || [],
+      usuario: jsonDados.usuario || null
+    };
   } catch (erro) {
     console.error('[API] Erro em buscarTransacoes:', erro.message);
     throw erro;
@@ -202,3 +210,66 @@ export const excluirTransacao = async (idTransacao) => {
     throw erro;
   }
 };
+
+/**
+ * Atualiza dados de uma transação.
+ * @param {number} id - ID da transação
+ * @param {object} camposAtualizados - Objeto com os campos a serem atualizados
+ */
+export const atualizarTransacao = async (id, camposAtualizados) => {
+  try {
+    const resposta = await fetchComTimeout(URL_BASE, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        user_id: ID_USUARIO,
+        action: 'update_transaction',
+        id: id,
+        ...camposAtualizados
+      }),
+    });
+
+    if (!resposta.ok) {
+      throw new Error(`Erro ao atualizar transação: ${resposta.status}`);
+    }
+
+    const dados = await resposta.json();
+    return typeof dados === 'string' ? JSON.parse(dados) : dados;
+  } catch (erro) {
+    console.error('[API] Erro em atualizarTransacao:', erro.message);
+    throw erro;
+  }
+};
+
+/**
+ * Atualiza o perfil do usuário.
+ * @param {object} dadosUsuario - { salario_mensal, limite_mensal, dia_vencimento_fatura }
+ */
+export const atualizarUsuario = async (dadosUsuario) => {
+  try {
+    const resposta = await fetchComTimeout(URL_BASE, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        user_id: ID_USUARIO,
+        action: 'update_user',
+        ...dadosUsuario
+      }),
+    });
+
+    if (!resposta.ok) {
+      throw new Error(`Erro ao atualizar usuário: ${resposta.status}`);
+    }
+
+    const dados = await resposta.json();
+    return typeof dados === 'string' ? JSON.parse(dados) : dados;
+  } catch (erro) {
+    console.error('[API] Erro em atualizarUsuario:', erro.message);
+    throw erro;
+  }
+};
+

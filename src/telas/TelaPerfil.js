@@ -13,7 +13,7 @@
  * Dados financeiros: Calculados a partir das transações reais.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { CORES, CORES_SEMANTICAS } from '../constantes/cores';
@@ -23,11 +23,12 @@ import { useTransacoes } from '../contextos/TransacoesContexto';
 import { formatarMoeda } from '../utilitarios/formatadores';
 import { calcularTotalGasto, calcularSaldo } from '../utilitarios/calculadores';
 import CartaoResumo from '../componentes/CartaoResumo';
+import ModalEditarPerfil from '../componentes/ModalEditarPerfil';
 
-/** Limite mensal definido pelo usuário (TODO: virá do backend) */
-const LIMITE_MENSAL = 1000;
-/** Salário mensal (TODO: virá do backend) */
-const SALARIO = 5000;
+/** Limite mensal padrão se não definido */
+const LIMITE_PADRAO = 1000;
+/** Salário padrão se não definido */
+const SALARIO_PADRAO = 5000;
 
 /**
  * Dados mockados do perfil do usuário.
@@ -47,12 +48,20 @@ const PERFIL_MOCKADO = {
  * @param {object} navigation - Navegação do React Navigation
  */
 const TelaPerfil = ({ navigation }) => {
-  const { transacoes } = useTransacoes();
+  const { transacoes, usuario, carregar } = useTransacoes();
+  const [modalPerfilVisivel, setModalPerfilVisivel] = useState(false);
+  const [campoAlvo, setCampoAlvo] = useState(null);
 
+  const salarioReal = usuario?.salario_mensal || SALARIO_PADRAO;
+  const limiteReal = usuario?.limite_mensal || LIMITE_PADRAO;
   const totalGasto = calcularTotalGasto(transacoes);
-  const saldo = SALARIO - totalGasto;
+  const saldo = salarioReal - totalGasto;
 
   /** Renderiza uma linha de configuração com ícone, texto e ação */
+  const abrirModal = (campo) => {
+    setCampoAlvo(campo);
+    setModalPerfilVisivel(true);
+  };
   const ItemConfig = ({ icone, corIcone, titulo, descricao, aoClicar, componente }) => (
     <TouchableOpacity
       style={estilos.itemConfig}
@@ -155,18 +164,32 @@ const TelaPerfil = ({ navigation }) => {
         <CartaoResumo
           icone="credit-card"
           label="Limite Mensal"
-          valor={formatarMoeda(LIMITE_MENSAL)}
+          valor={formatarMoeda(limiteReal)}
           corValor={CORES.textoPrincipal}
           corIcone={CORES.secundaria}
+          onPress={() => abrirModal('limite')}
         />
         <View style={{ width: 10 }} />
         <CartaoResumo
           icone="briefcase"
           label="Salário"
-          valor={formatarMoeda(SALARIO)}
+          valor={formatarMoeda(salarioReal)}
           corValor={CORES_SEMANTICAS.sucesso}
           corIcone={CORES_SEMANTICAS.sucesso}
+          onPress={() => abrirModal('salario')}
         />
+      </View>
+      <View style={[estilos.gridResumo, { marginTop: 10 }]}>
+        <CartaoResumo
+          icone="calendar"
+          label="Dia do Vencimento"
+          valor={usuario?.dia_vencimento_fatura ? `Dia ${usuario.dia_vencimento_fatura}` : 'Não definido'}
+          corValor={CORES.textoPrincipal}
+          corIcone={CORES.principal}
+          onPress={() => abrirModal('vencimento')}
+        />
+        <View style={{ width: 10 }} />
+        <View style={{ flex: 1 }} /> {/* Placeholder para equilibrar o grid */}
       </View>
 
       {/* ============================================ */}
@@ -174,12 +197,6 @@ const TelaPerfil = ({ navigation }) => {
       {/* ============================================ */}
       <Text style={estilos.secaoTitulo}>Configurações</Text>
       <View style={estilos.cardConfig}>
-        <ItemConfig
-          icone="user"
-          titulo="Dados Pessoais"
-          descricao="Atualize suas informações pessoais"
-        />
-        <View style={estilos.separador} />
         <ItemConfig
           icone="bell"
           titulo="Notificações"
@@ -222,6 +239,19 @@ const TelaPerfil = ({ navigation }) => {
         </View>
         <Feather name="chevron-right" size={20} color={CORES.textoSecundario} />
       </TouchableOpacity>
+
+      <ModalEditarPerfil
+        visivel={modalPerfilVisivel}
+        campoAlvo={campoAlvo}
+        aoFechar={async (novosCampos) => {
+          setModalPerfilVisivel(false);
+          setCampoAlvo(null);
+          if (novosCampos) {
+            await carregar(); // Recarrega os dados para pegar as atualizações
+          }
+        }}
+        usuarioAtual={usuario}
+      />
     </ScrollView>
   );
 };
