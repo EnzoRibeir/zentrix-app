@@ -1,195 +1,352 @@
 import json
 import os
-import jwt
-import hashlib
-from datetime import datetime, timedelta
+import time
+import csv
+import io
 import pymysql
-from functools import wraps
+import urllib.request
+from google import genai 
 
-# ===== AUTENTICAÇÃO =====
-SECRET_KEY = os.environ.get('JWT_SECRET_KEY')
+# 1. Configurações e Credenciais
+client = genai.Client(api_key=os.environ.get('GEMINI_API_KEY'))
+MODEL_ID = 'gemini-2.5-flash' 
 
-def validate_token(event):
-    """Valida JWT token"""
-    try:
-        auth_header = event.get('headers', {}).get('Authorization', '')
-        if not auth_header.startswith('Bearer '):
-            return None, {'statusCode': 401, 'body': json.dumps({'erro': 'Token não fornecido'})}
-        
-        token = auth_header.replace('Bearer ', '')
-        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-        return payload.get('user_id'), None
-    except jwt.ExpiredSignatureError:
-        return None, {'statusCode': 401, 'body': json.dumps({'erro': 'Token expirado'})}
-    except jwt.InvalidTokenError:
-        return None, {'statusCode': 401, 'body': json.dumps({'erro': 'Token inválido'})}
+DB_HOST = os.environ.get('DB_HOST')
+DB_USER = os.environ.get('DB_USER')
+DB_PASS = os.environ.get('DB_PASS')
+DB_NAME = 'db-zentrix'
+SSL_CA = 'global-bundle.pem'
 
-def generate_token(user_id, expires_in=24):
-    """Gera JWT token válido por X horas"""
+# Configurações do Telegram
+TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
+ALLOWED_TELEGRAM_USER_ID = os.environ.get('ALLOWED_TELEGRAM_USER_ID')
+ZENTRIX_USER_ID = os.environ.get('ZENTRIX_USER_ID', 'usuario_padrao')
+
+MINHAS_CATEGORIAS = [
+    "Essencial", "Role e Lazer", "Rangos", "Transporte", 
+    "Assinaturas", "Compras e Mimos", "A receber", "Outros"
+]
+
+def get_db_connection():
+    return pymysql.connect(
+        host=DB_HOST,
+        user=DB_USER,
+        password=DB_PASS,
+        database=DB_NAME,
+        ssl={'ca': SSL_CA},
+        cursorclass=pymysql.cursors.DictCursor
+    )
+
+def enviar_mensagem_telegram(chat_id, texto):
+    """Função auxiliar para enviar respostas de confirmação via Telegram"""
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {
-        'user_id': user_id,
-        'exp': datetime.utcnow() + timedelta(hours=expires_in)
+        "chat_id": chat_id,
+        "text": texto,
+        "parse_mode": "Markdown"
     }
-    return jwt.encode(payload, SECRET_KEY, algorithm='HS256')
+    data = json.dumps(payload).encode('utf-8')
+    req = urllib.request.Request(url, data=data, headers={'Content-Type': 'application/json'})
+    try:
+        with urllib.request.urlopen(req) as response:
+            return response.read()
+    except Exception as e:
+        print(f"ERRO AO ENVIAR MENSAGEM AO TELEGRAM: {str(e)}")
 
-# ===== VALIDAÇÃO DE ENTRADA =====
-def validate_input(data, required_fields):
-    """Valida campos obrigatórios"""
-    for field in required_fields:
-        if field not in data or not data[field]:
-            return False, f"Campo '{field}' é obrigatório"
-    return True, None
-
-def sanitize_string(text):
-    """Remove caracteres perigosos"""
-    if not isinstance(text, str):
-        return text
-    return text.strip()[:500]  # Limita a 500 caracteres
-
-# ===== RATE LIMITING =====
-RATE_LIMIT_CACHE = {}
-
-def check_rate_limit(user_id, max_requests=100, window_seconds=60):
-    """Verifica se usuário excedeu limite de requisições"""
-    now = datetime.utcnow()
-    key = f"{user_id}:{now.timestamp() // window_seconds}"
-    
-    if key not in RATE_LIMIT_CACHE:
-        RATE_LIMIT_CACHE[key] = 0
-    
-    RATE_LIMIT_CACHE[key] += 1
-    
-    if RATE_LIMIT_CACHE[key] > max_requests:
-        return False, {'statusCode': 429, 'body': json.dumps({'erro': 'Muitas requisições'})}
-    
-    return True, None
-
-# ===== LOGGING SEGURO =====
-def log_action(user_id, action, status, details=""):
-    """Log seguro sem expor dados sensíveis"""
-    print(f"[{datetime.utcnow()}] USER:{user_id} ACTION:{action} STATUS:{status}")
-
-# ===== HANDLERS ATUALIZADOS =====
-
+# --- ROTEADOR PRINCIPAL ---
 def lambda_handler(event, context):
-    # Validar token
-    user_id, error = validate_token(event)
-    if error:
-        return error
-    
-    # Rate limiting
-    allowed, error = check_rate_limit(user_id)
-    if not allowed:
-        return error
-    
-    metodo = event.get('httpMethod')
-    path = event.get('path', '')
+    metodo = event.get('httpMethod') or event.get('requestContext', {}).get('http', {}).get('method')
     
     try:
         if metodo == 'POST':
-            return tratar_post(event, user_id)
+            return tratar_post(event)
         elif metodo == 'GET':
-            if '/stats' in path:
-                return tratar_get_stats(event, user_id)
-            return tratar_get(event, user_id)
-        elif metodo == 'PUT':
-            return tratar_put(event, user_id)
+            return tratar_get(event)
         elif metodo == 'DELETE':
-            return tratar_delete(event, user_id)
+            return tratar_delete(event)
+        elif metodo == 'PUT':
+            return tratar_put(event)
         else:
-            return {'statusCode': 405, 'body': json.dumps({'erro': 'Método não permitido'})}
+            return tratar_post(event)
             
     except Exception as e:
-        log_action(user_id, 'request', 'error', str(e))
+        print(f"ERRO CRÍTICO: {str(e)}")
         return {
             'statusCode': 500,
-            'body': json.dumps({'erro': 'Erro interno do servidor'})
+            'body': json.dumps({'erro': str(e)})
         }
 
-def tratar_get(event, authenticated_user_id):
-    """GET - Listar transações (com segurança)"""
-    params = event.get('queryStringParameters', {})
-    user_id = params.get('user_id')
+# --- ENDPOINT: POST (Criação de Transações) ---
+def tratar_post(event):
+    body = json.loads(event.get('body', '{}'))
+    user_id = body.get('user_id', ZENTRIX_USER_ID)
+    conn = get_db_connection()
+
+    try:
+        with conn.cursor() as cursor:
+            
+            # CASO 1: BOT DO TELEGRAM
+            if 'message' in body:
+                telegram_msg = body.get('message', {})
+                chat_id = telegram_msg.get('chat', {}).get('id')
+                user_telegram_id = telegram_msg.get('from', {}).get('id')
+                texto_recebido = telegram_msg.get('text', '')
+
+                if str(user_telegram_id) != str(ALLOWED_TELEGRAM_USER_ID):
+                    enviar_mensagem_telegram(chat_id, "❌ Acesso não autorizado ao sistema Zentrix.")
+                    return {'statusCode': 200, 'body': json.dumps('Não autorizado')}
+
+                if not texto_recebido:
+                    enviar_mensagem_telegram(chat_id, "⚠️ Por enquanto só consigo processar mensagens de texto.")
+                    return {'statusCode': 200, 'body': json.dumps('Mensagem sem texto')}
+
+                prompt_ia = f"""
+                Extraia os dados da frase: '{texto_recebido}'
+                Categorias: {MINHAS_CATEGORIAS}
+                Tipos permitidos: [Débito, Crédito à Vista, Crédito Parcelado, Emprestado]
+                
+                Regras de Tipo:
+                - Se eu disser 'no débito' ou 'no pix' -> Débito
+                - Se houver parcelas -> Crédito Parcelado
+                - Se for 'A receber' -> Emprestado
+                - Padrão -> Crédito à Vista
+                
+                Retorne APENAS um JSON: {{"description": "nome", "amount": float, "category": "categoria", "type": "tipo", "installments": int, "debtor_name": "nome ou null"}}
+                """
+                
+                response = client.models.generate_content(model=MODEL_ID, contents=prompt_ia)
+                dados = json.loads(response.text.replace('```json', '').replace('```', '').strip())
+                
+                sql = """
+                    INSERT INTO transacoes 
+                    (user_id, description, amount, category, type, source, installments_total, debtor_name, raw_input_phrase) 
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """
+                cursor.execute(sql, (
+                    user_id, 
+                    dados['description'], 
+                    dados['amount'], 
+                    dados['category'], 
+                    dados['type'], 
+                    'TELEGRAM_BOT', 
+                    dados.get('installments', 1),
+                    dados.get('debtor_name'),
+                    texto_recebido
+                ))
+                
+                conn.commit()
+
+                msg_confirmacao = (
+                    f"✅ *Transação Salva no Zentrix!*\n\n"
+                    f"📝 *Item:* {dados['description']}\n"
+                    f"💰 *Valor:* R$ {dados['amount']:.2f}\n"
+                    f"🏷️ *Categoria:* {dados['category']}\n"
+                    f"💳 *Tipo:* {dados['type']}"
+                )
+                if dados.get('installments', 1) > 1:
+                    msg_confirmacao += f"\n🔢 *Parcelas:* {dados['installments']}"
+                if dados.get('debtor_name'):
+                    msg_confirmacao += f"\n👤 *Devedor:* {dados['debtor_name']}"
+
+                enviar_mensagem_telegram(chat_id, msg_confirmacao)
+                return {'statusCode': 200, 'body': json.dumps('Telegram processado')}
+
+            # CASO 2: IMPORTAÇÃO DE CSV (C6 BANK)
+            elif 'csv_text' in body:
+                f = io.StringIO(body['csv_text'].strip())
+                reader = list(csv.DictReader(f, delimiter=';'))
+                descricoes_brutas = list(set([row.get('Descrição', '') for row in reader if row.get('Descrição')]))
+                
+                prompt_lote = f"""
+                Categorias: {MINHAS_CATEGORIAS}.
+                Para cada item abaixo, retorne um JSON com a chave sendo o nome original:
+                {{ "desc_limpa": "nome curto", "cat": "categoria" }}
+                Itens: {descricoes_brutas}
+                """
+                
+                response = client.models.generate_content(model=MODEL_ID, contents=prompt_lote)
+                mapa_categorias = json.loads(response.text.replace('```json', '').replace('```', '').strip())
+                
+                contagem = 0
+                sql = """
+                    INSERT INTO transacoes 
+                    (user_id, description, amount, category, type, source, installments_total, installments_paid) 
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """
+                
+                for row in reader:
+                    desc_orig = row.get('Descrição', '')
+                    valor_bruto = row.get('Valor (em R$)', '0').replace('.', '').replace(',', '.')
+                    valor = float(valor_bruto)
+                    if valor <= 0: continue
+                    
+                    info_ia = mapa_categorias.get(desc_orig, {"desc_limpa": desc_orig, "cat": "Outros"})
+                    parcela_raw = row.get('Parcela', 'Única')
+                    
+                    total_p = 1
+                    paga_p = 1
+                    if "/" in parcela_raw:
+                        partes = parcela_raw.split("/")
+                        paga_p = int(partes[0])
+                        total_p = int(partes[1])
+                    
+                    tipo_movimentacao = "Crédito Parcelado" if "/" in parcela_raw else "Crédito à Vista"
+                    if info_ia['cat'] == "A receber":
+                        tipo_movimentacao = "Emprestado"
+
+                    cursor.execute(sql, (user_id, info_ia['desc_limpa'], valor, info_ia['cat'], tipo_movimentacao, 'C6_BANK', total_p, paga_p))
+                    contagem += 1
+                
+                conn.commit()
+                return {'statusCode': 201, 'body': json.dumps(f'{contagem} itens processados!')}
+
+            # CASO 3: FRASE POR VOZ DIRECT API
+            elif 'frase' in body:
+                prompt_ia = f"""
+                Extraia os dados da frase: '{body['frase']}'
+                Categorias: {MINHAS_CATEGORIAS}
+                Tipos permitidos: [Débito, Crédito à Vista, Crédito Parcelado, Emprestado]
+                
+                Retorne APENAS um JSON: {{"description": "nome", "amount": float, "category": "categoria", "type": "tipo", "installments": int, "debtor_name": "nome ou null"}}
+                """
+                response = client.models.generate_content(model=MODEL_ID, contents=prompt_ia)
+                dados = json.loads(response.text.replace('```json', '').replace('```', '').strip())
+                
+                sql = """
+                    INSERT INTO transacoes 
+                    (user_id, description, amount, category, type, source, installments_total, debtor_name, raw_input_phrase) 
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """
+                cursor.execute(sql, (
+                    user_id, 
+                    dados['description'], 
+                    dados['amount'], 
+                    dados['category'], 
+                    dados['type'], 
+                    'IA_CHAT', 
+                    dados.get('installments', 1),
+                    dados.get('debtor_name'),
+                    body['frase']
+                ))
+                
+                conn.commit()
+                return {'statusCode': 201, 'body': json.dumps({'message': 'Salvo!', 'dados': dados})}
+
+    finally:
+        conn.close()
+
+# --- ENDPOINT: GET (Consumo de Dados para o App Mobile) ---
+def tratar_get(event):
+    params = event.get('queryStringParameters', {}) or {}
+    user_id = params.get('user_id', ZENTRIX_USER_ID)
     
-    # Validar que o usuário só acessa seus próprios dados
-    if user_id != authenticated_user_id:
-        log_action(authenticated_user_id, 'get', 'denied', f'Tentou acessar {user_id}')
-        return {'statusCode': 403, 'body': json.dumps({'erro': 'Acesso negado'})}
-    
+    if not user_id:
+        return {'statusCode': 400, 'body': json.dumps('user_id é obrigatório')}
+        
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            sql = "SELECT id, description, amount, category, type, created_at FROM transacoes WHERE user_id = %s ORDER BY created_at DESC LIMIT 100"
+            # Retorna as transações
+            sql = "SELECT * FROM transacoes WHERE user_id = %s ORDER BY created_at DESC"
             cursor.execute(sql, (user_id,))
             items = cursor.fetchall()
-        
-        log_action(user_id, 'list_transactions', 'success', f'{len(items)} itens')
+
+            # Tenta pegar infos do usuario
+            sql_user = "SELECT * FROM usuarios WHERE id = %s"
+            cursor.execute(sql_user, (user_id,))
+            user_info = cursor.fetchone()
+
         return {
-            'statusCode': 200,
-            'headers': {'Content-Type': 'application/json'},
-            'body': json.dumps(items, default=str)
+            'statusCode': 200, 
+            'headers': {'Access-Control-Allow-Origin': '*'},
+            'body': json.dumps({'transacoes': items, 'usuario': user_info}, default=str)
         }
     finally:
         conn.close()
 
-def tratar_put(event, authenticated_user_id):
-    """PUT - Atualizar transação (NOVO)"""
+# --- ENDPOINT: DELETE (Exclusão de Transações pelo App Mobile) ---
+def tratar_delete(event):
     body = json.loads(event.get('body', '{}'))
-    user_id = body.get('user_id')
+    user_id = body.get('user_id', ZENTRIX_USER_ID)
+    transacao_id = body.get('id') 
     
-    # Verificar permissão
-    if user_id != authenticated_user_id:
-        return {'statusCode': 403, 'body': json.dumps({'erro': 'Acesso negado'})}
-    
-    # Validar entrada
-    valid, msg = validate_input(body, ['id', 'description', 'amount', 'category'])
-    if not valid:
-        return {'statusCode': 400, 'body': json.dumps({'erro': msg})}
-    
-    # Sanitizar entrada
-    body['description'] = sanitize_string(body['description'])
-    
+    if not user_id or not transacao_id:
+        return {'statusCode': 400, 'body': json.dumps('Faltam chaves para deletar')}
+        
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            # Verificar se transação pertence ao usuário
-            cursor.execute("SELECT id FROM transacoes WHERE id = %s AND user_id = %s", (body['id'], user_id))
-            if not cursor.fetchone():
-                return {'statusCode': 404, 'body': json.dumps({'erro': 'Transação não encontrada'})}
-            
-            sql = """
-                UPDATE transacoes 
-                SET description = %s, amount = %s, category = %s, updated_at = NOW()
-                WHERE id = %s AND user_id = %s
-            """
-            cursor.execute(sql, (body['description'], body['amount'], body['category'], body['id'], user_id))
+            sql = "DELETE FROM transacoes WHERE id = %s AND user_id = %s"
+            cursor.execute(sql, (transacao_id, user_id))
             conn.commit()
-        
-        log_action(user_id, 'update', 'success', f'ID:{body["id"]}')
-        return {'statusCode': 200, 'body': json.dumps({'message': 'Atualizado com sucesso!'})}
+            
+        return {'statusCode': 200, 'body': json.dumps('Item removido.')}
     finally:
         conn.close()
 
-def tratar_get_stats(event, authenticated_user_id):
-    """GET /stats - Resumo financeiro (NOVO)"""
+# --- ENDPOINT: PUT (Atualização de Dados) ---
+def tratar_put(event):
+    body = json.loads(event.get('body', '{}'))
+    user_id = body.get('user_id', ZENTRIX_USER_ID)
+    action = body.get('action')
+    
     conn = get_db_connection()
     try:
         with conn.cursor() as cursor:
-            sql = """
-                SELECT 
-                    category,
-                    SUM(amount) as total,
-                    COUNT(*) as count
-                FROM transacoes 
-                WHERE user_id = %s
-                GROUP BY category
-            """
-            cursor.execute(sql, (authenticated_user_id,))
-            stats = cursor.fetchall()
-        
-        return {
-            'statusCode': 200,
-            'body': json.dumps({'stats': stats}, default=str)
-        }
+            if action == 'update_transaction':
+                transacao_id = body.get('id')
+                if not transacao_id:
+                    return {'statusCode': 400, 'body': json.dumps('ID da transação não fornecido')}
+                
+                campos = []
+                valores = []
+                
+                if 'amount' in body:
+                    campos.append("amount = %s")
+                    valores.append(body['amount'])
+                if 'description' in body:
+                    campos.append("description = %s")
+                    valores.append(body['description'])
+                if 'category' in body:
+                    campos.append("category = %s")
+                    valores.append(body['category'])
+                if 'status' in body:
+                    campos.append("status = %s")
+                    valores.append(body['status'])
+                
+                if not campos:
+                    return {'statusCode': 400, 'body': json.dumps('Nenhum campo para atualizar na transação')}
+                
+                valores.extend([transacao_id, user_id])
+                sql = f"UPDATE transacoes SET {', '.join(campos)} WHERE id = %s AND user_id = %s"
+                cursor.execute(sql, tuple(valores))
+                conn.commit()
+                return {'statusCode': 200, 'body': json.dumps({'message': 'Transação atualizada'})}
+                
+            elif action == 'update_user':
+                campos = []
+                valores = []
+                
+                if 'salario_mensal' in body:
+                    campos.append("salario_mensal = %s")
+                    valores.append(body['salario_mensal'])
+                if 'limite_mensal' in body:
+                    campos.append("limite_mensal = %s")
+                    valores.append(body['limite_mensal'])
+                if 'dia_vencimento_fatura' in body:
+                    campos.append("dia_vencimento_fatura = %s")
+                    valores.append(body['dia_vencimento_fatura'])
+                    
+                if not campos:
+                    return {'statusCode': 400, 'body': json.dumps('Nenhum campo para atualizar no usuário')}
+                
+                valores.append(user_id)
+                sql = f"UPDATE usuarios SET {', '.join(campos)} WHERE id = %s"
+                cursor.execute(sql, tuple(valores))
+                conn.commit()
+                return {'statusCode': 200, 'body': json.dumps({'message': 'Perfil atualizado'})}
+                
+            else:
+                return {'statusCode': 400, 'body': json.dumps('Ação PUT desconhecida')}
     finally:
         conn.close()
