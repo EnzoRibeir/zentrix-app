@@ -16,7 +16,8 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { CORES, CORES_SEMANTICAS } from '../constantes/cores';
+import { CORES_SEMANTICAS } from '../constantes/cores';
+import { useTema } from '../contextos/TemaContexto';
 import { TIPOGRAFIA } from '../constantes/tipografia';
 import { ESPACAMENTOS } from '../constantes/espacamentos';
 import { useTransacoes } from '../contextos/TransacoesContexto';
@@ -49,6 +50,9 @@ const PERFIL_MOCKADO = {
  * @param {object} navigation - Navegação do React Navigation
  */
 const TelaPerfil = ({ navigation }) => {
+  const { CORES, isEscuro, alternarTema } = useTema();
+  const estilos = criarEstilos(CORES);
+
   const { transacoes, usuario, carregar } = useTransacoes();
   const { usuario: usuarioAuth, logout } = useAuth();
   const [modalPerfilVisivel, setModalPerfilVisivel] = useState(false);
@@ -212,7 +216,8 @@ const TelaPerfil = ({ navigation }) => {
           descricao="Alterne entre o modo Claro e o Modo Escuro"
           componente={
             <Switch
-              value={false}
+              value={isEscuro}
+              onValueChange={alternarTema}
               trackColor={{ false: CORES.borda, true: CORES.principal }}
               thumbColor={CORES.branco}
             />
@@ -261,7 +266,7 @@ const TelaPerfil = ({ navigation }) => {
   );
 };
 
-const estilos = StyleSheet.create({
+const criarEstilos = (CORES) => StyleSheet.create({
   container: { flex: 1, backgroundColor: CORES.fundo },
   conteudo: { padding: ESPACAMENTOS.margemHorizontal, paddingBottom: 100 },
   /* Header */
