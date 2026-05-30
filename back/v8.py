@@ -404,7 +404,16 @@ def tratar_get(event):
     
     # --- CASO ESPECIAL: Página de Login do Telegram ---
     if action == 'telegram-login':
-        return servir_pagina_telegram_login()
+        app_redirect_uri = params.get('app_redirect_uri', 'zentrix://auth/callback')
+        return servir_pagina_telegram_login(app_redirect_uri)
+    
+    # --- CASO ESPECIAL: Callback do Telegram (server-side redirect) ---
+    if action == 'telegram-callback':
+        return tratar_telegram_callback(params)
+    
+    # --- CASO ESPECIAL: Callback do Telegram (server-side redirect) ---
+    if action == 'telegram-callback':
+        return tratar_telegram_callback(params)
     
     user_id = params.get('user_id', ZENTRIX_USER_ID)
     
@@ -665,8 +674,7 @@ def tratar_telegram_callback(params):
     for key in sorted(params.keys()):
         if key not in ['hash', 'action', 'app_redirect_uri']:
             data_check_list.append(key + "=" + params[key])
-    data_check_string = "
-".join(data_check_list)
+    data_check_string = "\n".join(data_check_list)
     
     secret_key = hashlib.sha256(TELEGRAM_TOKEN.encode('utf-8')).digest()
     local_hash = hmac.new(secret_key, data_check_string.encode('utf-8'), hashlib.sha256).hexdigest()

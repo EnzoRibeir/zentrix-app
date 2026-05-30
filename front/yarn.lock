@@ -929,6 +929,15 @@
     dotenv-expand "~11.0.6"
     getenv "^2.0.0"
 
+"@expo/env@~2.3.0":
+  version "2.3.0"
+  resolved "https://registry.npmjs.org/@expo/env/-/env-2.3.0.tgz"
+  integrity sha512-9HnnIbzwTTdbwSjNLXTk0fPm9ZwMJ7c1/31tsni8HZ8Q62KzYCyspahH+V365vg5J6lr001DzNwBxVWSaYCQLg==
+  dependencies:
+    chalk "^4.0.0"
+    debug "^4.3.4"
+    getenv "^2.0.0"
+
 "@expo/fingerprint@0.15.5":
   version "0.15.5"
   resolved "https://registry.npmjs.org/@expo/fingerprint/-/fingerprint-0.15.5.tgz"
@@ -2551,6 +2560,13 @@ expo-constants@~18.0.13:
     "@expo/config" "~12.0.13"
     "@expo/env" "~2.0.8"
 
+expo-constants@~56.0.16:
+  version "56.0.16"
+  resolved "https://registry.npmjs.org/expo-constants/-/expo-constants-56.0.16.tgz"
+  integrity sha512-6tsiN+gmTUPp/atyA+uY9Tg8VOdXdmb4s/3TVGolfn6A/oCAraw1pcPZX5XllyD+xUguxB6eBSFAT8494hZVMA==
+  dependencies:
+    "@expo/env" "~2.3.0"
+
 expo-file-system@~19.0.22:
   version "19.0.22"
   resolved "https://registry.npmjs.org/expo-file-system/-/expo-file-system-19.0.22.tgz"
@@ -2572,6 +2588,14 @@ expo-linear-gradient@~15.0.8:
   version "15.0.8"
   resolved "https://registry.npmjs.org/expo-linear-gradient/-/expo-linear-gradient-15.0.8.tgz"
   integrity sha512-V2d8Wjn0VzhPHO+rrSBtcl+Fo+jUUccdlmQ6OoL9/XQB7Qk3d9lYrqKDJyccwDxmQT10JdST3Tmf2K52NLc3kw==
+
+expo-linking@^56.0.13:
+  version "56.0.13"
+  resolved "https://registry.npmjs.org/expo-linking/-/expo-linking-56.0.13.tgz"
+  integrity sha512-38YrpTh6xdiDxmYSDIUffDqev1hIcEggw2fZ3IZhNp2DVLF1xvqsbO6hJD1fuBKN8P34B3Ggc9Yy26fkqdfCOA==
+  dependencies:
+    expo-constants "~56.0.16"
+    invariant "^2.2.4"
 
 expo-modules-autolinking@3.0.25:
   version "3.0.25"

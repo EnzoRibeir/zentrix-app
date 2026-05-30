@@ -23,14 +23,13 @@ import * as WebBrowser from 'expo-web-browser';
 import { CORES, GRADIENTES } from '../constantes/cores';
 import { TIPOGRAFIA } from '../constantes/tipografia';
 import { useAuth } from '../contextos/AuthContexto';
+import * as Linking from 'expo-linking';
 
 // Permite que o WebBrowser retorne ao app corretamente após login
 WebBrowser.maybeCompleteAuthSession();
 
 /** URL do Lambda que serve a página HTML com o widget do Telegram */
-const AUTH_PAGE_URL = 'https://agog0k90kc.execute-api.sa-east-1.amazonaws.com/default/api-financas-ia?action=telegram-login';
-/** Deep link scheme que o backend redireciona de volta */
-const CALLBACK_URL = 'zentrix://auth/callback';
+const AUTH_PAGE_URL_BASE = 'https://agog0k90kc.execute-api.sa-east-1.amazonaws.com/default/api-financas-ia?action=telegram-login';
 
 export default function TelaLogin({ navigation }) {
   const [loading, setLoading] = useState(false);
@@ -129,9 +128,13 @@ export default function TelaLogin({ navigation }) {
     setLoading(true);
     
     try {
+      // Gera a URL de callback dinâmica (ex: zentrix://auth/callback, exp://..., ou http://localhost:...)
+      const callbackUrl = Linking.createURL('auth/callback');
+      const authUrl = `${AUTH_PAGE_URL_BASE}&app_redirect_uri=${encodeURIComponent(callbackUrl)}`;
+      
       const result = await WebBrowser.openAuthSessionAsync(
-        AUTH_PAGE_URL,
-        CALLBACK_URL
+        authUrl,
+        callbackUrl
       );
 
       if (result.type === 'success' && result.url) {
