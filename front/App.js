@@ -5,16 +5,19 @@
  * 
  * Arquivo principal que configura:
  * 1. Carregamento da fonte Itim (Google Fonts)
- * 2. Provider de estado global (TransacoesProvider)
- * 3. SafeAreaProvider para áreas seguras
- * 4. StatusBar configurada
- * 5. Navegação principal
+ * 2. Provider de autenticação (AuthProvider)
+ * 3. Provider de estado global (TransacoesProvider)
+ * 4. SafeAreaProvider para áreas seguras
+ * 5. StatusBar configurada
+ * 6. Navegação principal
  * 
  * Hierarquia:
  * <SafeAreaProvider>
- *   <TransacoesProvider>
- *     <NavegacaoPrincipal />
- *   </TransacoesProvider>
+ *   <AuthProvider>
+ *     <TransacoesProvider>
+ *       <NavegacaoPrincipal />
+ *     </TransacoesProvider>
+ *   </AuthProvider>
  * </SafeAreaProvider>
  */
 
@@ -22,6 +25,7 @@ import React from 'react';
 import { StatusBar } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFonts, Itim_400Regular } from '@expo-google-fonts/itim';
+import { AuthProvider } from './src/contextos/AuthContexto';
 import { TransacoesProvider } from './src/contextos/TransacoesContexto';
 import NavegacaoPrincipal from './src/navegacao/NavegacaoPrincipal';
 import CarregandoIndicador from './src/componentes/CarregandoIndicador';
@@ -46,11 +50,14 @@ export default function App() {
       {/* Barra de status clara (ícones escuros, fundo claro) */}
       <StatusBar barStyle="dark-content" backgroundColor="#EFF2F4" />
 
-      {/* Provider de estado global das transações */}
-      <TransacoesProvider>
-        {/* Navegação principal (Stack + Tabs) */}
-        <NavegacaoPrincipal />
-      </TransacoesProvider>
+      {/* Provider de autenticação (deve envolver TransacoesProvider) */}
+      <AuthProvider>
+        {/* Provider de estado global das transações */}
+        <TransacoesProvider>
+          {/* Navegação principal (Stack + Tabs) */}
+          <NavegacaoPrincipal />
+        </TransacoesProvider>
+      </AuthProvider>
     </SafeAreaProvider>
   );
 }

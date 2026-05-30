@@ -5,7 +5,10 @@
  * 
  * Primeira tela exibida ao abrir o app.
  * Mostra o logo do Zentrix com animação de fade-in e 
- * navega automaticamente para a tela principal após 2.5s.
+ * verifica se o usuário já possui sessão ativa.
+ * 
+ * - Se logado → navega direto para Principal
+ * - Se não logado → navega para Login
  * 
  * Design: Fundo cinza claro (#EFF2F4), logo centralizada.
  */
@@ -15,14 +18,17 @@ import { View, Text, StyleSheet, Animated } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { CORES } from '../constantes/cores';
 import { TIPOGRAFIA } from '../constantes/tipografia';
+import { useAuth } from '../contextos/AuthContexto';
 
 /**
  * Tela de inicialização (splash) com animação de entrada.
- * Redireciona para a tela principal após o tempo definido.
+ * Verifica sessão existente e redireciona adequadamente.
  * 
  * @param {object} navigation - Objeto de navegação do React Navigation
  */
 const TelaInicializacao = ({ navigation }) => {
+  const { logado, verificandoSessao } = useAuth();
+
   /** Valor animado para o efeito de fade-in */
   const opacidade = useRef(new Animated.Value(0)).current;
   /** Valor animado para o efeito de escala */
@@ -43,14 +49,25 @@ const TelaInicializacao = ({ navigation }) => {
         useNativeDriver: true,
       }),
     ]).start();
+  }, [opacidade, escala]);
 
-    // Navega para a tela principal após 2.5 segundos
+  useEffect(() => {
+    // Aguarda a verificação de sessão do AsyncStorage terminar
+    if (verificandoSessao) return;
+
+    // Após 2 segundos (tempo da animação), redireciona
     const temporizador = setTimeout(() => {
-      navigation.replace('Principal');
-    }, 2500);
+      if (logado) {
+        // Usuário já tem sessão salva → vai direto pro app
+        navigation.replace('Principal');
+      } else {
+        // Sem sessão → vai pra tela de login
+        navigation.replace('Login');
+      }
+    }, 2000);
 
     return () => clearTimeout(temporizador);
-  }, [navigation, opacidade, escala]);
+  }, [navigation, logado, verificandoSessao]);
 
   return (
     <View style={estilos.container}>

@@ -406,6 +406,10 @@ def tratar_get(event):
     if action == 'telegram-login':
         return servir_pagina_telegram_login()
     
+    # --- CASO ESPECIAL: Callback do Telegram (server-side redirect) ---
+    if action == 'telegram-callback':
+        return tratar_telegram_callback(params)
+    
     user_id = params.get('user_id', ZENTRIX_USER_ID)
     
     if not user_id:
@@ -544,9 +548,10 @@ def servir_pagina_telegram_login():
     Retorna a página HTML com o widget oficial de login do Telegram.
     Acessível via GET: ?action=telegram-login
     
-    Essa página é aberta pelo app via WebBrowser.openAuthSessionAsync()
-    e, após o login, redireciona de volta para o app com os dados assinados.
+    Usa data-auth-url para redirecionar server-side (funciona no Android).
     """
+    callback_url = "https://agog0k90kc.execute-api.sa-east-1.amazonaws.com/default/api-financas-ia?action=telegram-callback"
+    
     html = """<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -587,14 +592,6 @@ def servir_pagina_telegram_login():
             margin-top: 24px; font-size: 0.72rem; color: rgba(255,255,255,0.4);
         }
         .security-note svg { width: 14px; height: 14px; flex-shrink: 0; }
-        .loading { display: none; flex-direction: column; align-items: center; gap: 16px; padding: 20px; }
-        .loading.active { display: flex; }
-        .spinner {
-            width: 36px; height: 36px; border: 3px solid rgba(255,255,255,0.3);
-            border-top-color: #fff; border-radius: 50%; animation: spin 0.8s linear infinite;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .loading-text { font-size: 0.9rem; color: rgba(255,255,255,0.8); }
     </style>
 </head>
 <body>
@@ -618,13 +615,9 @@ def servir_pagina_telegram_login():
                     data-telegram-login="ZentrixOFCBot"
                     data-size="large"
                     data-radius="14"
-                    data-onauth="onTelegramAuth(user)"
+                    data-auth-url="__CALLBACK_URL__"
                     data-request-access="write">
                 </script>
-            </div>
-            <div class="loading" id="loading-state">
-                <div class="spinner"></div>
-                <span class="loading-text">Autenticando com o Telegram...</span>
             </div>
             <div class="security-note">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -634,22 +627,8 @@ def servir_pagina_telegram_login():
             </div>
         </div>
     </div>
-    <script>
-        function onTelegramAuth(user) {
-            document.getElementById('telegram-widget-container').style.display = 'none';
-            document.getElementById('loading-state').classList.add('active');
-            const params = new URLSearchParams();
-            for (const [key, value] of Object.entries(user)) {
-                if (value !== undefined && value !== null) {
-                    params.append(key, value);
-                }
-            }
-            const callbackUrl = 'zentrix://auth/callback?' + params.toString();
-            setTimeout(function() { window.location.href = callbackUrl; }, 500);
-        }
-    </script>
 </body>
-</html>"""
+</html>""".replace("__CALLBACK_URL__", callback_url)
 
     return {
         'statusCode': 200,
@@ -659,3 +638,89 @@ def servir_pagina_telegram_login():
         },
         'body': html
     }
+
+
+# --- ENDPOINT: Callback do Telegram (validacao server-side + redirect) ---
+def tratar_telegram_callback(params):
+    """
+    Recebe os dados de autenticacao do Telegram via query params,
+    valida o hash HMAC-SHA256, cria/encontra o usuario no banco,
+    e redireciona para o deep link do app com os dados de sessao.
+    
+    Fluxo: Telegram Widget -> este endpoint -> valida hash -> redirect zentrix://
+    Muito mais robusto no Android que redirect via JavaScript.
+    """
+    tg_hash = params.get('hash', '')
+    auth_date = params.get('auth_date', '0')
+    telegram_id = params.get('id', '')
+    first_name = params.get('first_name', 'Usuario')
+    
+    if not tg_hash or not telegram_id:
+        return {
+            'statusCode': 302,
+            'headers': {'Location': 'zentrix://auth/callback?error=dados_incompletos'},
+            'body': ''
+        }
+    
+    # 1. Validar hash HMAC-SHA256
+    data_check_list = []
+    for key in sorted(params.keys()):
+        if key != 'hash' and key != 'action':
+            data_check_list.append(key + "=" + params[key])
+    data_check_string = "\n".join(data_check_list)
+    
+    secret_key = hashlib.sha256(TELEGRAM_TOKEN.encode('utf-8')).digest()
+    local_hash = hmac.new(secret_key, data_check_string.encode('utf-8'), hashlib.sha256).hexdigest()
+    
+    if local_hash != tg_hash:
+        return {
+            'statusCode': 302,
+            'headers': {'Location': 'zentrix://auth/callback?error=hash_invalido'},
+            'body': ''
+        }
+    
+    # 2. Verificar expiracao (24 horas)
+    if time.time() - int(auth_date) > 86400:
+        return {
+            'statusCode': 302,
+            'headers': {'Location': 'zentrix://auth/callback?error=expirado'},
+            'body': ''
+        }
+    
+    # 3. Criar ou encontrar usuario no banco
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT id FROM usuarios WHERE id = %s", (str(telegram_id),))
+            usuario = cursor.fetchone()
+            
+            if not usuario:
+                email_placeholder = str(telegram_id) + "@telegram.zentrix"
+                sql = "INSERT INTO usuarios (id, nome, email, password_hash) VALUES (%s, %s, %s, %s)"
+                cursor.execute(sql, (str(telegram_id), first_name, email_placeholder, 'TELEGRAM_AUTH'))
+                conn.commit()
+            
+            # 4. Gerar token de sessao
+            session_token = str(uuid.uuid4())
+            
+            # 5. Redirecionar para o app com os dados de sessao (HTTP 302)
+            import urllib.parse
+            callback_params = urllib.parse.urlencode({
+                'token_sessao': session_token,
+                'user_id_interno': str(telegram_id),
+                'nome': first_name
+            })
+            
+            redirect_url = "zentrix://auth/callback?" + callback_params
+            
+            return {
+                'statusCode': 302,
+                'headers': {
+                    'Location': redirect_url,
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': ''
+            }
+    finally:
+        conn.close()
+

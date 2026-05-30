@@ -32,6 +32,7 @@ import { TIPOGRAFIA } from '../constantes/tipografia';
 
 // Telas
 import TelaInicializacao from '../telas/TelaInicializacao';
+import TelaLogin from '../telas/TelaLogin';
 import TelaInicial from '../telas/TelaInicial';
 import TelaTransacoes from '../telas/TelaTransacoes';
 import TelaRelatorios from '../telas/TelaRelatorios';
@@ -195,6 +196,12 @@ const NavegacaoPrincipal = () => {
         <Stack.Screen
           name="Inicializacao"
           component={TelaInicializacao}
+          options={{ animation: 'fade' }}
+        />
+        {/* Tela de Login */}
+        <Stack.Screen
+          name="Login"
+          component={TelaLogin}
           options={{ animation: 'fade' }}
         />
         {/* Tab Navigator (telas principais) */}

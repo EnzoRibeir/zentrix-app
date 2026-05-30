@@ -26,6 +26,7 @@ import { CORES, CORES_SEMANTICAS } from '../constantes/cores';
 import { TIPOGRAFIA } from '../constantes/tipografia';
 import { ESPACAMENTOS } from '../constantes/espacamentos';
 import { useTransacoes } from '../contextos/TransacoesContexto';
+import { useAuth } from '../contextos/AuthContexto';
 import { formatarMoeda } from '../utilitarios/formatadores';
 import {
   calcularTotalGasto,
@@ -47,6 +48,7 @@ const LIMITE_PADRAO = 1000;
  */
 const TelaInicial = ({ navigation }) => {
   const { transacoes, usuario, carregando, carregar } = useTransacoes();
+  const { usuario: usuarioAuth } = useAuth();
   const [atualizando, setAtualizando] = useState(false);
 
   /** Carrega transações ao montar a tela */
@@ -94,7 +96,7 @@ const TelaInicial = ({ navigation }) => {
       <View style={estilos.header}>
         <View>
           <Text style={estilos.saudacao}>Olá,</Text>
-          <Text style={estilos.nomeUsuario}>Enzo!</Text>
+          <Text style={estilos.nomeUsuario}>{usuarioAuth?.nome || 'Usuário'}!</Text>
         </View>
         <View style={estilos.headerIcones}>
           {/* Botão de busca */}

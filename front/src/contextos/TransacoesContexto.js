@@ -11,12 +11,16 @@
  * - Mensagens de erro
  * - Ações: carregar, adicionar (via frase IA), excluir
  * 
+ * IMPORTANTE: Todas as chamadas à API agora usam o user_id
+ * dinâmico vindo do AuthContexto (Telegram ID do usuário logado).
+ * 
  * Uso nos componentes:
  *   const { transacoes, carregando, carregar } = useTransacoes();
  */
 
 import React, { createContext, useContext, useReducer, useCallback } from 'react';
 import { buscarTransacoes, criarTransacaoPorFrase, excluirTransacao, atualizarTransacao } from '../servicos/api';
+import { useAuth } from './AuthContexto';
 
 // ===========================================
 // TIPOS DE AÇÃO DO REDUCER
@@ -104,29 +108,34 @@ const TransacoesContexto = createContext(null);
 
 /**
  * Provider que envolve o app e disponibiliza o estado de transações.
- * Deve ser colocado no topo da árvore de componentes (App.js).
+ * Deve ser colocado dentro do AuthProvider (App.js).
  * 
  * @example
- * <TransacoesProvider>
- *   <NavegacaoPrincipal />
- * </TransacoesProvider>
+ * <AuthProvider>
+ *   <TransacoesProvider>
+ *     <NavegacaoPrincipal />
+ *   </TransacoesProvider>
+ * </AuthProvider>
  */
 export const TransacoesProvider = ({ children }) => {
   const [estado, despachar] = useReducer(transacoesReducer, estadoInicial);
+  const { usuario: usuarioAuth } = useAuth();
 
   /**
-   * Carrega todas as transações da API.
+   * Carrega todas as transações da API para o usuário logado.
    * Chamado na montagem da tela inicial e no pull-to-refresh.
    */
   const carregar = useCallback(async () => {
+    if (!usuarioAuth?.user_id) return;
+
     despachar({ type: ACOES.INICIAR_CARREGAMENTO });
     try {
-      const dados = await buscarTransacoes();
+      const dados = await buscarTransacoes(usuarioAuth.user_id);
       despachar({ type: ACOES.CARREGAR_SUCESSO, payload: dados });
     } catch (erro) {
       despachar({ type: ACOES.DEFINIR_ERRO, payload: erro.message });
     }
-  }, []);
+  }, [usuarioAuth?.user_id]);
 
   /**
    * Adiciona uma nova transação enviando uma frase para a IA processar.
@@ -136,8 +145,10 @@ export const TransacoesProvider = ({ children }) => {
    * @returns {Promise<boolean>} true se criou com sucesso, false se houve erro
    */
   const adicionar = useCallback(async (frase) => {
+    if (!usuarioAuth?.user_id) return false;
+
     try {
-      await criarTransacaoPorFrase(frase);
+      await criarTransacaoPorFrase(usuarioAuth.user_id, frase);
       // Recarrega a lista completa após criar (para pegar o ID gerado pelo banco)
       await carregar();
       return true;
@@ -145,7 +156,7 @@ export const TransacoesProvider = ({ children }) => {
       despachar({ type: ACOES.DEFINIR_ERRO, payload: erro.message });
       return false;
     }
-  }, [carregar]);
+  }, [carregar, usuarioAuth?.user_id]);
 
   /**
    * Exclui uma transação pelo ID.
@@ -155,10 +166,12 @@ export const TransacoesProvider = ({ children }) => {
    * @returns {Promise<boolean>} true se excluiu com sucesso
    */
   const remover = useCallback(async (idTransacao) => {
+    if (!usuarioAuth?.user_id) return false;
+
     try {
       // Remoção otimista: remove da lista local antes de confirmar com a API
       despachar({ type: ACOES.REMOVER_TRANSACAO, payload: idTransacao });
-      await excluirTransacao(idTransacao);
+      await excluirTransacao(usuarioAuth.user_id, idTransacao);
       return true;
     } catch (erro) {
       // Se falhou, recarrega a lista para restaurar o item
@@ -166,18 +179,20 @@ export const TransacoesProvider = ({ children }) => {
       despachar({ type: ACOES.DEFINIR_ERRO, payload: 'Erro ao excluir transação' });
       return false;
     }
-  }, [carregar]);
+  }, [carregar, usuarioAuth?.user_id]);
 
   const atualizar = useCallback(async (id, campos) => {
+    if (!usuarioAuth?.user_id) return false;
+
     try {
-      await atualizarTransacao(id, campos);
+      await atualizarTransacao(usuarioAuth.user_id, id, campos);
       await carregar(); // recarrega a lista para pegar o novo status
       return true;
     } catch (erro) {
       despachar({ type: ACOES.DEFINIR_ERRO, payload: 'Erro ao atualizar transação' });
       return false;
     }
-  }, [carregar]);
+  }, [carregar, usuarioAuth?.user_id]);
 
   /** Valor exposto pelo contexto para todos os componentes filhos */
   const valor = {
@@ -211,7 +226,8 @@ export const TransacoesProvider = ({ children }) => {
  *   erro: string|null,
  *   carregar: Function,
  *   adicionar: Function,
- *   remover: Function
+ *   remover: Function,
+ *   atualizar: Function
  * }}
  * 
  * @example

@@ -15,8 +15,10 @@ import { CORES } from '../constantes/cores';
 import { TIPOGRAFIA } from '../constantes/tipografia';
 import { ESPACAMENTOS } from '../constantes/espacamentos';
 import { atualizarUsuario } from '../servicos/api';
+import { useAuth } from '../contextos/AuthContexto';
 
 export default function ModalEditarPerfil({ visivel, aoFechar, usuarioAtual, campoAlvo }) {
+  const { usuario: usuarioAuth } = useAuth();
   const [salario, setSalario] = useState(usuarioAtual?.salario_mensal ? String(usuarioAtual.salario_mensal) : '');
   const [limite, setLimite] = useState(usuarioAtual?.limite_mensal ? String(usuarioAtual.limite_mensal) : '');
   const [diaVencimento, setDiaVencimento] = useState(usuarioAtual?.dia_vencimento_fatura ? String(usuarioAtual.dia_vencimento_fatura) : '');
@@ -39,7 +41,7 @@ export default function ModalEditarPerfil({ visivel, aoFechar, usuarioAtual, cam
     };
     
     try {
-      await atualizarUsuario(campos);
+      await atualizarUsuario(usuarioAuth?.user_id, campos);
       aoFechar(campos);
     } catch (e) {
       alert('Erro ao atualizar perfil');

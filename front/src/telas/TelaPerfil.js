@@ -20,6 +20,7 @@ import { CORES, CORES_SEMANTICAS } from '../constantes/cores';
 import { TIPOGRAFIA } from '../constantes/tipografia';
 import { ESPACAMENTOS } from '../constantes/espacamentos';
 import { useTransacoes } from '../contextos/TransacoesContexto';
+import { useAuth } from '../contextos/AuthContexto';
 import { formatarMoeda } from '../utilitarios/formatadores';
 import { calcularTotalGasto, calcularSaldo } from '../utilitarios/calculadores';
 import CartaoResumo from '../componentes/CartaoResumo';
@@ -49,6 +50,7 @@ const PERFIL_MOCKADO = {
  */
 const TelaPerfil = ({ navigation }) => {
   const { transacoes, usuario, carregar } = useTransacoes();
+  const { usuario: usuarioAuth, logout } = useAuth();
   const [modalPerfilVisivel, setModalPerfilVisivel] = useState(false);
   const [campoAlvo, setCampoAlvo] = useState(null);
 
@@ -108,8 +110,8 @@ const TelaPerfil = ({ navigation }) => {
       {/* ============================================ */}
       <TouchableOpacity style={estilos.cardUsuario}>
         <View style={estilos.cardUsuarioInfo}>
-          <Text style={estilos.nomeUsuario}>{PERFIL_MOCKADO.nome}</Text>
-          <Text style={estilos.emailUsuario}>{PERFIL_MOCKADO.email}</Text>
+          <Text style={estilos.nomeUsuario}>{usuarioAuth?.nome || 'Usuário'}</Text>
+          <Text style={estilos.emailUsuario}>Conta Telegram • ID: {usuarioAuth?.user_id || '---'}</Text>
         </View>
         <Feather name="chevron-right" size={24} color={CORES.textoSecundario} />
       </TouchableOpacity>
@@ -226,7 +228,10 @@ const TelaPerfil = ({ navigation }) => {
         onPress={() =>
           Alert.alert('Sair', 'Deseja realmente sair da sua conta?', [
             { text: 'Cancelar', style: 'cancel' },
-            { text: 'Sair', style: 'destructive' },
+            { text: 'Sair', style: 'destructive', onPress: async () => {
+              await logout();
+              navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+            }},
           ])
         }
       >
