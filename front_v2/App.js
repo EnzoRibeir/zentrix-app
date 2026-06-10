@@ -11,6 +11,7 @@ import { useFonts, Itim_400Regular } from '@expo-google-fonts/itim';
 import { AuthProvider } from './src/contextos/AuthContexto';
 import { TransacoesProvider } from './src/contextos/TransacoesContexto';
 import { TemaProvider, useTema } from './src/contextos/TemaContexto';
+import { NotificacoesProvider } from './src/contextos/NotificacoesContexto';
 import NavegacaoPrincipal from './src/navegacao/NavegacaoPrincipal';
 import CarregandoIndicador from './src/componentes/CarregandoIndicador';
 
@@ -25,7 +26,9 @@ const AppContent = () => {
       />
       <AuthProvider>
         <TransacoesProvider>
-          <NavegacaoPrincipal />
+          <NotificacoesProvider>
+            <NavegacaoPrincipal />
+          </NotificacoesProvider>
         </TransacoesProvider>
       </AuthProvider>
     </SafeAreaProvider>

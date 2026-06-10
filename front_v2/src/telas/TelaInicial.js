@@ -28,6 +28,7 @@ import { TIPOGRAFIA } from '../constantes/tipografia';
 import { ESPACAMENTOS } from '../constantes/espacamentos';
 import { useTransacoes } from '../contextos/TransacoesContexto';
 import { useAuth } from '../contextos/AuthContexto';
+import { useNotificacoes } from '../contextos/NotificacoesContexto';
 import { formatarMoeda } from '../utilitarios/formatadores';
 import {
   calcularTotalGasto,
@@ -53,6 +54,7 @@ const TelaInicial = ({ navigation }) => {
 
   const { transacoes, usuario, carregando, carregar } = useTransacoes();
   const { usuario: usuarioAuth } = useAuth();
+  const { naoLidosCount } = useNotificacoes();
   const [atualizando, setAtualizando] = useState(false);
 
   /** Carrega transações ao montar a tela */
@@ -107,12 +109,19 @@ const TelaInicial = ({ navigation }) => {
           <TouchableOpacity style={estilos.iconeBotao}>
             <Feather name="search" size={22} color={CORES.principal} />
           </TouchableOpacity>
-          {/* Botão de notificações */}
+          {/* Botão de notificações com badge */}
           <TouchableOpacity
             style={estilos.iconeBotao}
             onPress={() => navigation.navigate('Notificacoes')}
           >
             <Feather name="bell" size={22} color={CORES.principal} />
+            {naoLidosCount > 0 && (
+              <View style={estilos.badge}>
+                <Text style={estilos.badgeTexto}>
+                  {naoLidosCount > 9 ? '9+' : naoLidosCount}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -231,6 +240,23 @@ const criarEstilos = (CORES) => StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
+  },
+  badge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#E53935',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 3,
+  },
+  badgeTexto: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '700',
   },
   /* Card Principal */
   cardPrincipal: {

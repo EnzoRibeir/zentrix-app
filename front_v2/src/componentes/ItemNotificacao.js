@@ -14,12 +14,15 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTema } from '../contextos/TemaContexto';
+import { useNotificacoes } from '../contextos/NotificacoesContexto';
 import { TIPOGRAFIA } from '../constantes/tipografia';
 import { ESPACAMENTOS } from '../constantes/espacamentos';
 
 /**
  * Card de notificação individual.
- * 
+ * Ao tocar, marca automaticamente como lida (bolinha some).
+ *
+ * @param {string} id - ID único da notificação
  * @param {string} icone - Nome do ícone Feather
  * @param {string} corIcone - Cor do ícone
  * @param {string} titulo - Título da notificação
@@ -27,12 +30,19 @@ import { ESPACAMENTOS } from '../constantes/espacamentos';
  * @param {string} horario - Horário/data da notificação
  * @param {boolean} naoLido - Se true, exibe indicador de não lido
  */
-const ItemNotificacao = ({ icone, corIcone, titulo, descricao, horario, naoLido = false }) => {
+const ItemNotificacao = ({ id, icone, corIcone, titulo, descricao, horario, naoLido = false }) => {
   const { CORES } = useTema();
   const estilos = criarEstilos(CORES);
+  const { marcarComoLida } = useNotificacoes();
+
+  const aoTocar = () => {
+    if (naoLido && id) {
+      marcarComoLida(id);
+    }
+  };
 
   return (
-    <TouchableOpacity style={estilos.container} activeOpacity={0.7}>
+    <TouchableOpacity style={[estilos.container, naoLido && estilos.containerNaoLido]} onPress={aoTocar} activeOpacity={0.7}>
       {/* Ícone circular */}
       <View style={[estilos.containerIcone, { backgroundColor: `${corIcone}15` }]}>
         <Feather name={icone} size={22} color={corIcone} />
@@ -40,7 +50,7 @@ const ItemNotificacao = ({ icone, corIcone, titulo, descricao, horario, naoLido 
 
       {/* Conteúdo central */}
       <View style={estilos.containerConteudo}>
-        <Text style={estilos.titulo}>{titulo}</Text>
+        <Text style={[estilos.titulo, naoLido && estilos.tituloNaoLido]}>{titulo}</Text>
         <Text style={estilos.descricao} numberOfLines={2}>{descricao}</Text>
       </View>
 
@@ -67,6 +77,10 @@ const criarEstilos = (CORES) => StyleSheet.create({
     shadowRadius: 4,
     elevation: 1,
   },
+  containerNaoLido: {
+    borderLeftWidth: 3,
+    borderLeftColor: CORES.principal,
+  },
   containerIcone: {
     width: 46,
     height: 46,
@@ -83,6 +97,9 @@ const criarEstilos = (CORES) => StyleSheet.create({
     ...TIPOGRAFIA.corpo,
     color: CORES.textoPrincipal,
     marginBottom: 4,
+  },
+  tituloNaoLido: {
+    fontWeight: '700',
   },
   descricao: {
     ...TIPOGRAFIA.legenda,
@@ -101,7 +118,7 @@ const criarEstilos = (CORES) => StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: CORES.destaque,
+    backgroundColor: CORES.principal,
   },
 });
 
