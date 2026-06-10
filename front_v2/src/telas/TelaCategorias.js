@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, LayoutAnimation, UIManager, Platform } from 'react-native';
+import {
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  LayoutAnimation, UIManager, Platform,
+} from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTransacoes } from '../contextos/TransacoesContexto';
@@ -8,10 +11,10 @@ import { CORES_CATEGORIAS } from '../constantes/cores';
 import { TIPOGRAFIA } from '../constantes/tipografia';
 import { ESPACAMENTOS } from '../constantes/espacamentos';
 import { formatarMoeda } from '../utilitarios/formatadores';
+import { obterCategoria } from '../constantes/categorias';
 import ItemTransacao from '../componentes/ItemTransacao';
 import CarregandoIndicador from '../componentes/CarregandoIndicador';
 
-// Habilita LayoutAnimation no Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
@@ -25,41 +28,32 @@ export default function TelaCategorias({ route, navigation }) {
   const { transacoes, carregando } = useTransacoes();
   const [categoriaExpandida, setCategoriaExpandida] = useState(categoriaInicial || null);
 
-  // Auto-expandir caso venha do gráfico
   useEffect(() => {
-    if (categoriaInicial) {
-      setCategoriaExpandida(categoriaInicial);
-    }
+    if (categoriaInicial) setCategoriaExpandida(categoriaInicial);
   }, [categoriaInicial]);
 
-  if (carregando && transacoes.length === 0) {
-    return <CarregandoIndicador />;
-  }
+  if (carregando && transacoes.length === 0) return <CarregandoIndicador />;
 
   // Agrupa transações por categoria
   const categoriasAgrupadas = {};
   transacoes.forEach(t => {
-    // Se for tipo "Emprestado", agrupamos como "A receber"
     const cat = t.type === 'Emprestado' ? 'A receber' : (t.category || 'Outros');
     if (!categoriasAgrupadas[cat]) {
       categoriasAgrupadas[cat] = {
-        nome: cat,
-        itens: [],
-        total: 0,
+        nome: cat, itens: [], total: 0,
         cor: CORES_CATEGORIAS[cat] || CORES_CATEGORIAS['Outros'],
-        pendentes: 0
+        pendentes: 0,
       };
     }
     categoriasAgrupadas[cat].itens.push(t);
     categoriasAgrupadas[cat].total += parseFloat(t.amount || 0);
-
     if (t.type === 'Emprestado' && (!t.status || t.status === 'PENDING')) {
       categoriasAgrupadas[cat].pendentes += parseFloat(t.amount || 0);
     }
   });
 
-  // Converte para array e ordena por total (maior primeiro)
   const listaCategorias = Object.values(categoriasAgrupadas).sort((a, b) => b.total - a.total);
+  const totalGeral = listaCategorias.reduce((acc, c) => acc + c.total, 0);
 
   const toggleExpandir = (nomeCategoria) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -68,11 +62,15 @@ export default function TelaCategorias({ route, navigation }) {
 
   return (
     <View style={estilos.container}>
+      {/* Header */}
       <View style={estilos.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={estilos.botaoVoltar}>
           <Feather name="arrow-left" size={24} color={CORES.textoPrincipal} />
         </TouchableOpacity>
-        <Text style={estilos.titulo}>Categorias</Text>
+        <View style={estilos.headerTexto}>
+          <Text style={estilos.titulo}>Categorias</Text>
+          <Text style={estilos.headerSubtitulo}>{listaCategorias.length} categorias · {formatarMoeda(totalGeral)}</Text>
+        </View>
         <View style={{ width: 40 }} />
       </View>
 
@@ -85,47 +83,97 @@ export default function TelaCategorias({ route, navigation }) {
         ) : (
           listaCategorias.map((cat) => {
             const expandido = categoriaExpandida === cat.nome;
+            const catInfo = obterCategoria(cat.nome);
+            const porcentagem = totalGeral > 0 ? (cat.total / totalGeral) * 100 : 0;
+
             return (
-              <View key={cat.nome} style={estilos.accordionContainer}>
-                {/* Cabeçalho do Accordion */}
-                <TouchableOpacity 
-                  style={[estilos.accordionHeader, expandido && estilos.accordionHeaderAtivo]} 
+              <View key={cat.nome} style={[estilos.accordionContainer, expandido && { borderColor: cat.cor + '40', borderWidth: 1 }]}>
+                {/* Cabeçalho */}
+                <TouchableOpacity
+                  style={estilos.accordionHeader}
                   onPress={() => toggleExpandir(cat.nome)}
                   activeOpacity={0.7}
                 >
-                  <View style={estilos.accordionHeaderEsquerda}>
-                    <View style={[estilos.bolinhaCor, { backgroundColor: cat.cor }]} />
-                    <View>
+                  {/* Ícone da categoria */}
+                  <View style={[estilos.iconeCategoria, { backgroundColor: catInfo.corFundo }]}>
+                    <Feather name={catInfo.icone} size={18} color={catInfo.cor} />
+                  </View>
+
+                  {/* Textos + barra */}
+                  <View style={estilos.accordionMiddle}>
+                    <View style={estilos.accordionLinhaTopo}>
                       <Text style={estilos.categoriaNome}>{cat.nome}</Text>
-                      <Text style={estilos.categoriaQtd}>{cat.itens.length} transaç{cat.itens.length > 1 ? 'ões' : 'ão'}</Text>
-                    </View>
-                  </View>
-                  <View style={estilos.accordionHeaderDireita}>
-                    <View>
                       <Text style={estilos.categoriaTotal}>{formatarMoeda(cat.total)}</Text>
-                      {cat.pendentes > 0 && (
-                        <Text style={estilos.categoriaPendente}>
-                          {formatarMoeda(cat.pendentes)} pendente
-                        </Text>
-                      )}
                     </View>
-                    <Feather 
-                      name={expandido ? "chevron-up" : "chevron-down"} 
-                      size={20} 
-                      color={CORES.textoSecundario} 
-                      style={{ marginLeft: 8 }}
-                    />
+                    <View style={estilos.accordionLinhaInfo}>
+                      <Text style={estilos.categoriaQtd}>
+                        {cat.itens.length} {cat.itens.length > 1 ? 'transações' : 'transação'}
+                      </Text>
+                      <Text style={[estilos.categoriaPorcentagem, { color: catInfo.cor }]}>
+                        {Math.round(porcentagem)}%
+                      </Text>
+                    </View>
+                    {/* Barra de progresso */}
+                    <View style={estilos.barraFundo}>
+                      <View
+                        style={[estilos.barraPreenchimento, {
+                          width: `${porcentagem}%`,
+                          backgroundColor: catInfo.cor,
+                        }]}
+                      />
+                    </View>
+                    {cat.pendentes > 0 && (
+                      <Text style={estilos.categoriaPendente}>
+                        {formatarMoeda(cat.pendentes)} pendente
+                      </Text>
+                    )}
                   </View>
+
+                  {/* Chevron */}
+                  <Feather
+                    name={expandido ? 'chevron-up' : 'chevron-down'}
+                    size={18}
+                    color={expandido ? catInfo.cor : CORES.textoSecundario}
+                    style={{ marginLeft: 8 }}
+                  />
                 </TouchableOpacity>
 
                 {/* Conteúdo Expandido */}
                 {expandido && (
-                  <View style={estilos.accordionContent}>
+                  <View style={[estilos.accordionContent, { borderTopColor: cat.cor + '30' }]}>
+                    {/* Resumo rápido no topo do expandido */}
+                    <View style={estilos.resumoExpandido}>
+                      <View style={estilos.resumoItem}>
+                        <Text style={estilos.resumoLabel}>Total</Text>
+                        <Text style={[estilos.resumoValor, { color: catInfo.cor }]}>{formatarMoeda(cat.total)}</Text>
+                      </View>
+                      <View style={estilos.resumoSeparador} />
+                      <View style={estilos.resumoItem}>
+                        <Text style={estilos.resumoLabel}>Transações</Text>
+                        <Text style={estilos.resumoValor}>{cat.itens.length}</Text>
+                      </View>
+                      <View style={estilos.resumoSeparador} />
+                      <View style={estilos.resumoItem}>
+                        <Text style={estilos.resumoLabel}>% do total</Text>
+                        <Text style={[estilos.resumoValor, { color: catInfo.cor }]}>{Math.round(porcentagem)}%</Text>
+                      </View>
+                      {cat.pendentes > 0 && (
+                        <>
+                          <View style={estilos.resumoSeparador} />
+                          <View style={estilos.resumoItem}>
+                            <Text style={estilos.resumoLabel}>Pendente</Text>
+                            <Text style={[estilos.resumoValor, { color: '#E67E22' }]}>{formatarMoeda(cat.pendentes)}</Text>
+                          </View>
+                        </>
+                      )}
+                    </View>
+
+                    {/* Lista de transações */}
                     {cat.itens.map((transacao, index) => (
-                      <View key={transacao.id} style={[
-                        estilos.itemWrapper, 
-                        index < cat.itens.length - 1 && estilos.bordaItem
-                      ]}>
+                      <View
+                        key={transacao.id}
+                        style={[estilos.itemWrapper, index < cat.itens.length - 1 && estilos.bordaItem]}
+                      >
                         <ItemTransacao
                           transacao={transacao}
                           mostrarBadge={false}
@@ -145,110 +193,88 @@ export default function TelaCategorias({ route, navigation }) {
 }
 
 const criarEstilos = (CORES, insets) => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: CORES.fundo,
-  },
+  container: { flex: 1, backgroundColor: CORES.fundo },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: ESPACAMENTOS.l,
+    padding: ESPACAMENTOS.l || 20,
     backgroundColor: CORES.branco,
     borderBottomWidth: 1,
     borderBottomColor: CORES.borda,
-    paddingTop: (insets?.top || 0) + ESPACAMENTOS.l,
+    paddingTop: (insets?.top || 0) + (ESPACAMENTOS.l || 20),
   },
-  botaoVoltar: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-  },
-  titulo: {
-    ...TIPOGRAFIA.subtitulo,
-    color: CORES.textoPrincipal,
-  },
-  conteudo: {
-    padding: ESPACAMENTOS.m,
-    paddingBottom: 100,
-  },
+  botaoVoltar: { width: 40, height: 40, justifyContent: 'center' },
+  headerTexto: { alignItems: 'center' },
+  titulo: { ...TIPOGRAFIA.subtitulo, color: CORES.textoPrincipal },
+  headerSubtitulo: { ...TIPOGRAFIA.legenda, color: CORES.textoSecundario, marginTop: 2 },
+  conteudo: { padding: ESPACAMENTOS.margemHorizontal, paddingBottom: 100 },
   accordionContainer: {
     backgroundColor: CORES.branco,
     borderRadius: ESPACAMENTOS.raioBorda,
-    marginBottom: ESPACAMENTOS.m,
+    marginBottom: ESPACAMENTOS.espacoEntreCards,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   accordionHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: ESPACAMENTOS.m,
+    padding: ESPACAMENTOS.paddingCard - 4,
+    paddingVertical: 14,
   },
-  accordionHeaderAtivo: {
-    borderBottomWidth: 1,
-    borderBottomColor: CORES.borda,
-    backgroundColor: `${CORES.fundoCard || CORES.fundo}50`,
+  iconeCategoria: {
+    width: 42, height: 42, borderRadius: 12,
+    justifyContent: 'center', alignItems: 'center',
+    marginRight: 12, flexShrink: 0,
   },
-  accordionHeaderEsquerda: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  accordionMiddle: { flex: 1 },
+  accordionLinhaTopo: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginBottom: 2,
   },
-  bolinhaCor: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 12,
+  accordionLinhaInfo: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginBottom: 6,
   },
-  categoriaNome: {
-    ...TIPOGRAFIA.corpo,
-    color: CORES.textoPrincipal,
-    fontFamily: TIPOGRAFIA.familias?.negrito || TIPOGRAFIA.corpo.fontFamily,
+  categoriaNome: { ...TIPOGRAFIA.corpo, color: CORES.textoPrincipal, fontSize: 15 },
+  categoriaTotal: { ...TIPOGRAFIA.corpo, color: CORES.textoPrincipal, fontSize: 14 },
+  categoriaQtd: { ...TIPOGRAFIA.legenda, color: CORES.textoSecundario },
+  categoriaPorcentagem: { ...TIPOGRAFIA.legenda, fontSize: 12 },
+  barraFundo: {
+    height: 4, backgroundColor: CORES.borda, borderRadius: 2, overflow: 'hidden',
   },
-  categoriaQtd: {
-    ...TIPOGRAFIA.legenda,
-    color: CORES.textoSecundario,
-    marginTop: 2,
-  },
-  accordionHeaderDireita: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  categoriaTotal: {
-    ...TIPOGRAFIA.corpo,
-    color: CORES.textoPrincipal,
-    textAlign: 'right',
-  },
+  barraPreenchimento: { height: 4, borderRadius: 2 },
   categoriaPendente: {
-    ...TIPOGRAFIA.legenda,
-    color: CORES.secundaria,
-    textAlign: 'right',
-    marginTop: 2,
+    ...TIPOGRAFIA.legenda, color: '#E67E22', marginTop: 4,
   },
   accordionContent: {
     backgroundColor: CORES.fundo,
-    padding: ESPACAMENTOS.m,
+    borderTopWidth: 1,
+    borderTopColor: CORES.borda,
+    paddingHorizontal: ESPACAMENTOS.margemHorizontal,
+    paddingBottom: 8,
   },
-  itemWrapper: {
-    paddingVertical: 4,
+  resumoExpandido: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 12,
+    marginBottom: 4,
   },
+  resumoItem: { flex: 1, alignItems: 'center' },
+  resumoLabel: { ...TIPOGRAFIA.legenda, color: CORES.textoSecundario, marginBottom: 2 },
+  resumoValor: { ...TIPOGRAFIA.corpoPequeno, color: CORES.textoPrincipal },
+  resumoSeparador: { width: 1, height: 28, backgroundColor: CORES.borda },
+  itemWrapper: { paddingVertical: 4 },
   bordaItem: {
     borderBottomWidth: 1,
     borderBottomColor: CORES.borda,
     marginBottom: 4,
   },
-  vazioContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-  },
-  vazioTexto: {
-    ...TIPOGRAFIA.corpo,
-    color: CORES.textoSecundario,
-    marginTop: 16,
-  }
+  vazioContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },
+  vazioTexto: { ...TIPOGRAFIA.corpo, color: CORES.textoSecundario, marginTop: 16 },
 });
