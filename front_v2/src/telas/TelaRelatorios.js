@@ -16,11 +16,13 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CORES_SEMANTICAS } from '../constantes/cores';
 import { useTema } from '../contextos/TemaContexto';
 import { TIPOGRAFIA } from '../constantes/tipografia';
 import { ESPACAMENTOS } from '../constantes/espacamentos';
 import { useTransacoes } from '../contextos/TransacoesContexto';
+import { useNotificacoes } from '../contextos/NotificacoesContexto';
 import { formatarMoeda } from '../utilitarios/formatadores';
 import {
   calcularTotalGasto,
@@ -45,9 +47,11 @@ const ABAS_PERIODO = ['Este mês', 'Últimos 3 meses', 'Este ano', 'Personalizad
  */
 const TelaRelatorios = ({ navigation }) => {
   const { CORES } = useTema();
-  const estilos = criarEstilos(CORES);
+  const insets = useSafeAreaInsets();
+  const estilos = criarEstilos(CORES, insets);
 
   const { transacoes } = useTransacoes();
+  const { naoLidosCount } = useNotificacoes();
   const [periodoAtivo, setPeriodoAtivo] = useState('Este mês');
 
   // Cálculos derivados
@@ -81,6 +85,13 @@ const TelaRelatorios = ({ navigation }) => {
             onPress={() => navigation.navigate('Notificacoes')}
           >
             <Feather name="bell" size={22} color={CORES.principal} />
+            {naoLidosCount > 0 && (
+              <View style={estilos.badge}>
+                <Text style={estilos.badgeTexto}>
+                  {naoLidosCount > 9 ? '9+' : naoLidosCount}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -198,22 +209,21 @@ const TelaRelatorios = ({ navigation }) => {
   );
 };
 
-const criarEstilos = (CORES) => StyleSheet.create({
+const criarEstilos = (CORES, insets) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: CORES.fundo,
   },
   conteudo: {
     padding: ESPACAMENTOS.margemHorizontal,
+    paddingTop: (insets?.top || 0) + 10,
     paddingBottom: 100,
   },
-  /* Header */
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 16,
-    marginTop: 10,
   },
   titulo: {
     ...TIPOGRAFIA.tituloMedio,
@@ -240,6 +250,23 @@ const criarEstilos = (CORES) => StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
+  },
+  badge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#E53935',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 3,
+  },
+  badgeTexto: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '700',
   },
   /* Seções */
   secaoTitulo: {

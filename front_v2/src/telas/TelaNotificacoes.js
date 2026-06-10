@@ -13,6 +13,7 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTema } from '../contextos/TemaContexto';
 import { useNotificacoes } from '../contextos/NotificacoesContexto';
 import { TIPOGRAFIA } from '../constantes/tipografia';
@@ -24,7 +25,8 @@ const ABAS_FILTRO = ['Todas', 'Transações', 'Alertas', 'Sistema'];
 
 const TelaNotificacoes = ({ navigation }) => {
   const { CORES } = useTema();
-  const estilos = criarEstilos(CORES);
+  const insets = useSafeAreaInsets();
+  const estilos = criarEstilos(CORES, insets);
   const { notificacoes, naoLidosCount, marcarTodasComoLidas } = useNotificacoes();
 
   const [filtroAtivo, setFiltroAtivo] = useState('Todas');
@@ -98,11 +100,13 @@ const TelaNotificacoes = ({ navigation }) => {
   );
 };
 
-const criarEstilos = (CORES) => StyleSheet.create({
+const criarEstilos = (CORES, insets) => StyleSheet.create({
   container: { flex: 1, backgroundColor: CORES.fundo },
   header: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: ESPACAMENTOS.margemHorizontal, paddingTop: 10, paddingBottom: 16,
+    paddingHorizontal: ESPACAMENTOS.margemHorizontal,
+    paddingTop: (insets?.top || 0) + 10,
+    paddingBottom: 16,
   },
   botaoVoltar: { width: 40, height: 40, justifyContent: 'center' },
   titulo: { ...TIPOGRAFIA.subtitulo, color: CORES.textoPrincipal },

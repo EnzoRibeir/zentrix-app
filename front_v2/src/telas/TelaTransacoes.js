@@ -16,6 +16,7 @@ import {
   TextInput, Modal, ScrollView, Animated,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTema } from '../contextos/TemaContexto';
 import { TIPOGRAFIA } from '../constantes/tipografia';
 import { ESPACAMENTOS } from '../constantes/espacamentos';
@@ -31,7 +32,8 @@ const ABAS_FILTRO = ['Todas', 'Entradas', 'Saídas'];
 
 const TelaTransacoes = ({ navigation }) => {
   const { CORES } = useTema();
-  const estilos = criarEstilos(CORES);
+  const insets = useSafeAreaInsets();
+  const estilos = criarEstilos(CORES, insets);
   const { transacoes, carregando } = useTransacoes();
 
   const [filtroAtivo, setFiltroAtivo] = useState('Todas');
@@ -260,11 +262,13 @@ const TelaTransacoes = ({ navigation }) => {
   );
 };
 
-const criarEstilos = (CORES) => StyleSheet.create({
+const criarEstilos = (CORES, insets) => StyleSheet.create({
   container: { flex: 1, backgroundColor: CORES.fundo },
   header: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: ESPACAMENTOS.margemHorizontal, paddingTop: 10, paddingBottom: 16,
+    paddingHorizontal: ESPACAMENTOS.margemHorizontal,
+    paddingTop: (insets?.top || 0) + 10,
+    paddingBottom: 16,
   },
   titulo: { ...TIPOGRAFIA.tituloMedio, color: CORES.textoPrincipal },
   headerIcones: { flexDirection: 'row', gap: 10 },

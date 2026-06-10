@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, LayoutAnimation, UIManager, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTransacoes } from '../contextos/TransacoesContexto';
 import { useTema } from '../contextos/TemaContexto';
 import { CORES_CATEGORIAS } from '../constantes/cores';
@@ -17,7 +18,8 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 export default function TelaCategorias({ route, navigation }) {
   const { CORES } = useTema();
-  const estilos = criarEstilos(CORES);
+  const insets = useSafeAreaInsets();
+  const estilos = criarEstilos(CORES, insets);
 
   const { categoriaInicial } = route.params || {};
   const { transacoes, carregando } = useTransacoes();
@@ -142,7 +144,7 @@ export default function TelaCategorias({ route, navigation }) {
   );
 }
 
-const criarEstilos = (CORES) => StyleSheet.create({
+const criarEstilos = (CORES, insets) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: CORES.fundo,
@@ -155,7 +157,7 @@ const criarEstilos = (CORES) => StyleSheet.create({
     backgroundColor: CORES.branco,
     borderBottomWidth: 1,
     borderBottomColor: CORES.borda,
-    paddingTop: Platform.OS === 'ios' ? 50 : ESPACAMENTOS.l,
+    paddingTop: (insets?.top || 0) + ESPACAMENTOS.l,
   },
   botaoVoltar: {
     width: 40,
