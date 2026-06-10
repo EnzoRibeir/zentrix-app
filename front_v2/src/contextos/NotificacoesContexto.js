@@ -8,17 +8,37 @@
  * - Persiste o estado de "lido/não lido" no AsyncStorage
  * - Expõe contagem de não lidos para o badge na tab/header
  * - Permite marcar uma ou todas como lidas
+ * - Dispara push notifications locais no celular via expo-notifications
+ *   quando novas transações são detectadas
  */
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
 import { CORES_SEMANTICAS } from '../constantes/cores';
 import { formatarMoeda, formatarHora } from '../utilitarios/formatadores';
 import { useTransacoes } from './TransacoesContexto';
 
+// ============================================================
+// CONFIGURAÇÃO GLOBAL DO HANDLER DE NOTIFICAÇÕES
+// Define como o app se comporta ao receber uma notificação
+// enquanto está em primeiro plano (som + badge + banner)
+// ============================================================
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
+
 const STORAGE_KEY = '@zentrix_notificacoes_lidas';
 const NotificacoesContexto = createContext(null);
 
+// ============================================================
+// NOTIFICAÇÕES FIXAS DE SISTEMA (não disparam push)
+// ============================================================
 const NOTIFICACOES_SISTEMA = [
   {
     id: 'sys-1', tipo: 'Alertas', icone: 'alert-triangle',
@@ -68,32 +88,149 @@ const gerarNotificacoesDasTransacoes = (transacoes) =>
     horario: formatarHora(t.created_at),
   }));
 
+// ============================================================
+// FUNÇÕES DE PUSH NOTIFICATION LOCAL
+// ============================================================
+
+/**
+ * Solicita permissão de notificação ao usuário.
+ * Retorna true se a permissão foi concedida, false caso contrário.
+ * No Android, também cria o canal de notificação.
+ */
+async function solicitarPermissaoNotificacao() {
+  // Android: cria o canal antes de pedir permissão
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync('zentrix-transacoes', {
+      name: 'Transações',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#274C77',
+      sound: 'default',
+    });
+    await Notifications.setNotificationChannelAsync('zentrix-alertas', {
+      name: 'Alertas',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      sound: 'default',
+    });
+  }
+
+  const { status: statusExistente } = await Notifications.getPermissionsAsync();
+  if (statusExistente === 'granted') return true;
+
+  const { status } = await Notifications.requestPermissionsAsync();
+  return status === 'granted';
+}
+
+/**
+ * Dispara uma notificação local imediata no sistema operacional.
+ *
+ * @param {string} titulo - Título da notificação
+ * @param {string} corpo - Corpo da notificação
+ * @param {object} dados - Dados extras (ex: id da transação)
+ * @param {string} canal - Canal Android: 'zentrix-transacoes' | 'zentrix-alertas'
+ */
+async function dispararNotificacaoLocal(titulo, corpo, dados = {}, canal = 'zentrix-transacoes') {
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: titulo,
+        body: corpo,
+        data: dados,
+        sound: 'default',
+        // Badge será gerenciado pelo setNotificationHandler
+      },
+      trigger: null, // null = imediato
+      ...(Platform.OS === 'android' ? { channelId: canal } : {}),
+    });
+  } catch (err) {
+    console.warn('[Zentrix] Falha ao disparar notificação local:', err);
+  }
+}
+
+// ============================================================
+// PROVIDER
+// ============================================================
 export const NotificacoesProvider = ({ children }) => {
   const [idsLidos, setIdsLidos] = useState(new Set());
+  const [permissaoConcedida, setPermissaoConcedida] = useState(false);
   const { transacoes } = useTransacoes();
   const prevIdsRef = useRef(new Set());
+  // Controla se é a primeira carga (não dispara push no boot)
+  const primeiraCarregaRef = useRef(true);
 
-  // Carrega lidos salvos
+  // ----------------------------------------------------------
+  // 1. Solicita permissão ao montar o provider
+  // ----------------------------------------------------------
+  useEffect(() => {
+    solicitarPermissaoNotificacao().then((concedida) => {
+      setPermissaoConcedida(concedida);
+    });
+  }, []);
+
+  // ----------------------------------------------------------
+  // 2. Carrega IDs lidos salvos no AsyncStorage
+  // ----------------------------------------------------------
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((salvo) => {
       if (salvo) setIdsLidos(new Set(JSON.parse(salvo)));
     }).catch(() => {});
   }, []);
 
-  // Novas transações = novas notificações não lidas
+  // ----------------------------------------------------------
+  // 3. Detecta novas transações e dispara push no celular
+  // ----------------------------------------------------------
   useEffect(() => {
     const idsAtuais = new Set(transacoes.map((t) => `trans-${t.id}`));
     const idsNovos = [...idsAtuais].filter((id) => !prevIdsRef.current.has(id));
+
     if (idsNovos.length > 0) {
+      // Marca como não lidos no estado interno
       setIdsLidos((prev) => {
         const novo = new Set(prev);
         idsNovos.forEach((id) => novo.delete(id));
         return novo;
       });
-    }
-    prevIdsRef.current = idsAtuais;
-  }, [transacoes]);
 
+      // Dispara push SOMENTE após a primeira carga
+      // (evita spam de notificações ao abrir o app)
+      if (!primeiraCarregaRef.current && permissaoConcedida) {
+        const transacoesNovas = transacoes.filter((t) =>
+          idsNovos.includes(`trans-${t.id}`)
+        );
+
+        if (transacoesNovas.length === 1) {
+          // Notificação individual com detalhes
+          const t = transacoesNovas[0];
+          const isGasto = parseFloat(t.amount) < 0;
+          dispararNotificacaoLocal(
+            isGasto ? '💸 Nova despesa registrada' : '💰 Nova receita registrada',
+            `${t.description} — ${formatarMoeda(Math.abs(parseFloat(t.amount)))}`,
+            { transacaoId: t.id, tipo: 'transacao' },
+            'zentrix-transacoes'
+          );
+        } else if (transacoesNovas.length > 1) {
+          // Notificação agrupada
+          dispararNotificacaoLocal(
+            '📊 Zentrix atualizado',
+            `${transacoesNovas.length} novas transações foram registradas.`,
+            { tipo: 'lote' },
+            'zentrix-transacoes'
+          );
+        }
+      }
+    }
+
+    // Após o primeiro ciclo, desliga a flag
+    if (primeiraCarregaRef.current && transacoes.length > 0) {
+      primeiraCarregaRef.current = false;
+    }
+
+    prevIdsRef.current = idsAtuais;
+  }, [transacoes, permissaoConcedida]);
+
+  // ----------------------------------------------------------
+  // Helpers para marcar como lido
+  // ----------------------------------------------------------
   const salvarLidos = useCallback((novosLidos) => {
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify([...novosLidos])).catch(() => {});
   }, []);
@@ -114,8 +251,13 @@ export const NotificacoesProvider = ({ children }) => {
     ]);
     setIdsLidos(todos);
     salvarLidos(todos);
+    // Limpa o badge do ícone do app
+    Notifications.setBadgeCountAsync(0).catch(() => {});
   }, [transacoes, salvarLidos]);
 
+  // ----------------------------------------------------------
+  // Monta a lista de notificações com flag naoLido
+  // ----------------------------------------------------------
   const notificacoes = [
     ...gerarNotificacoesDasTransacoes(transacoes),
     ...NOTIFICACOES_SISTEMA,
@@ -123,8 +265,24 @@ export const NotificacoesProvider = ({ children }) => {
 
   const naoLidosCount = notificacoes.filter((n) => n.naoLido).length;
 
+  // Sincroniza badge do ícone do app com a contagem de não lidos
+  useEffect(() => {
+    if (permissaoConcedida) {
+      Notifications.setBadgeCountAsync(naoLidosCount).catch(() => {});
+    }
+  }, [naoLidosCount, permissaoConcedida]);
+
   return (
-    <NotificacoesContexto.Provider value={{ notificacoes, naoLidosCount, marcarComoLida, marcarTodasComoLidas }}>
+    <NotificacoesContexto.Provider
+      value={{
+        notificacoes,
+        naoLidosCount,
+        marcarComoLida,
+        marcarTodasComoLidas,
+        permissaoConcedida,
+        dispararNotificacaoLocal, // exposto para uso externo (ex: alerta de orçamento)
+      }}
+    >
       {children}
     </NotificacoesContexto.Provider>
   );

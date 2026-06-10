@@ -69,7 +69,6 @@ const TabNavigator = () => {
           tabBarStyle: {
             backgroundColor: CORES.principal,
             borderTopWidth: 0,
-            // Altura fixa + padding para a safe area inferior (gestos/botões do celular)
             height: (Platform.OS === 'ios' ? 60 : 58) + insets.bottom,
             paddingTop: 8,
             paddingBottom: insets.bottom,
@@ -144,9 +143,10 @@ const TabNavigator = () => {
   );
 };
 
-const NavegacaoPrincipal = () => {
+// Recebe a ref do App.js para permitir navegação ao tocar em notificações
+const NavegacaoPrincipal = React.forwardRef((props, ref) => {
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={ref}>
       <Stack.Navigator
         screenOptions={{
           headerShown: false,
@@ -162,7 +162,9 @@ const NavegacaoPrincipal = () => {
       </Stack.Navigator>
     </NavigationContainer>
   );
-};
+});
+
+NavegacaoPrincipal.displayName = 'NavegacaoPrincipal';
 
 const criarEstilos = (CORES) => StyleSheet.create({
   botaoCentral: {
