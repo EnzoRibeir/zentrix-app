@@ -14,14 +14,16 @@
  */
 
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, TextInput } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CORES_SEMANTICAS } from '../constantes/cores';
 import { useTema } from '../contextos/TemaContexto';
 import { TIPOGRAFIA } from '../constantes/tipografia';
 import { ESPACAMENTOS } from '../constantes/espacamentos';
 import { useTransacoes } from '../contextos/TransacoesContexto';
 import { useAuth } from '../contextos/AuthContexto';
+import { useNotificacoes } from '../contextos/NotificacoesContexto';
 import { formatarMoeda } from '../utilitarios/formatadores';
 import { calcularTotalGasto, calcularSaldo } from '../utilitarios/calculadores';
 import CartaoResumo from '../componentes/CartaoResumo';
@@ -51,12 +53,16 @@ const PERFIL_MOCKADO = {
  */
 const TelaPerfil = ({ navigation }) => {
   const { CORES, isEscuro, alternarTema } = useTema();
-  const estilos = criarEstilos(CORES);
+  const insets = useSafeAreaInsets();
+  const estilos = criarEstilos(CORES, insets);
 
   const { transacoes, usuario, carregar } = useTransacoes();
   const { usuario: usuarioAuth, logout } = useAuth();
+  const { naoLidosCount } = useNotificacoes();
   const [modalPerfilVisivel, setModalPerfilVisivel] = useState(false);
   const [campoAlvo, setCampoAlvo] = useState(null);
+  const [buscaVisivel, setBuscaVisivel] = useState(false);
+  const [termoBusca, setTermoBusca] = useState('');
 
   const salarioReal = usuario?.salario_mensal || SALARIO_PADRAO;
   const limiteReal = usuario?.limite_mensal || LIMITE_PADRAO;
@@ -95,18 +101,44 @@ const TelaPerfil = ({ navigation }) => {
       {/* HEADER */}
       {/* ============================================ */}
       <View style={estilos.header}>
-        <Text style={estilos.titulo}>Meu Perfil</Text>
-        <View style={estilos.headerIcones}>
-          <TouchableOpacity style={estilos.iconeBotao}>
-            <Feather name="search" size={22} color={CORES.principal} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={estilos.iconeBotao}
-            onPress={() => navigation.navigate('Notificacoes')}
-          >
-            <Feather name="bell" size={22} color={CORES.principal} />
-          </TouchableOpacity>
-        </View>
+        {buscaVisivel ? (
+          <View style={estilos.barraBusca}>
+            <Feather name="search" size={18} color={CORES.textoSecundario} style={{ marginRight: 8 }} />
+            <TextInput
+              style={estilos.inputBusca}
+              placeholder="Buscar transações..."
+              placeholderTextColor={CORES.textoSecundario}
+              value={termoBusca}
+              onChangeText={setTermoBusca}
+              autoFocus
+            />
+            <TouchableOpacity onPress={() => { setBuscaVisivel(false); setTermoBusca(''); }}>
+              <Feather name="x" size={18} color={CORES.textoSecundario} />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <>
+            <Text style={estilos.titulo}>Meu Perfil</Text>
+            <View style={estilos.headerIcones}>
+              <TouchableOpacity style={estilos.iconeBotao} onPress={() => setBuscaVisivel(true)}>
+                <Feather name="search" size={22} color={CORES.principal} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={estilos.iconeBotao}
+                onPress={() => navigation.navigate('Notificacoes')}
+              >
+                <Feather name="bell" size={22} color={CORES.principal} />
+                {naoLidosCount > 0 && (
+                  <View style={estilos.badge}>
+                    <Text style={estilos.badgeTexto}>
+                      {naoLidosCount > 9 ? '9+' : naoLidosCount}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
       </View>
 
       {/* ============================================ */}
@@ -266,13 +298,16 @@ const TelaPerfil = ({ navigation }) => {
   );
 };
 
-const criarEstilos = (CORES) => StyleSheet.create({
+const criarEstilos = (CORES, insets) => StyleSheet.create({
   container: { flex: 1, backgroundColor: CORES.fundo },
-  conteudo: { padding: ESPACAMENTOS.margemHorizontal, paddingBottom: 100 },
-  /* Header */
+  conteudo: {
+    padding: ESPACAMENTOS.margemHorizontal,
+    paddingTop: (insets?.top || 0) + 10,
+    paddingBottom: 100,
+  },
   header: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    marginBottom: 16, marginTop: 10,
+    marginBottom: 16,
   },
   titulo: { ...TIPOGRAFIA.tituloMedio, color: CORES.textoPrincipal },
   headerIcones: { flexDirection: 'row', gap: 10 },
@@ -281,6 +316,18 @@ const criarEstilos = (CORES) => StyleSheet.create({
     justifyContent: 'center', alignItems: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
   },
+  badge: {
+    position: 'absolute', top: 6, right: 6,
+    minWidth: 16, height: 16, borderRadius: 8,
+    backgroundColor: '#E53935', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 3,
+  },
+  badgeTexto: { color: '#fff', fontSize: 9, fontWeight: '700' },
+  barraBusca: {
+    flex: 1, flexDirection: 'row', alignItems: 'center',
+    backgroundColor: CORES.branco, borderRadius: 23, paddingHorizontal: 16, height: 46,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
+  },
+  inputBusca: { flex: 1, ...TIPOGRAFIA.corpo, color: CORES.textoPrincipal, padding: 0 },
   /* Card Usuário */
   cardUsuario: {
     backgroundColor: CORES.branco, borderRadius: ESPACAMENTOS.raioBorda,

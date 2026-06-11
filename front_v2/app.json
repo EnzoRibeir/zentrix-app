@@ -20,9 +20,24 @@
       "intentFilters": [
         {
           "action": "VIEW",
-          "data": [{ "scheme": "zentrix", "host": "auth", "pathPrefix": "/callback" }],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "data": [
+            {
+              "scheme": "zentrix",
+              "host": "auth",
+              "pathPrefix": "/callback"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
+      ],
+      "permissions": [
+        "RECEIVE_BOOT_COMPLETED",
+        "SCHEDULE_EXACT_ALARM",
+        "VIBRATE",
+        "POST_NOTIFICATIONS"
       ]
     },
     "web": {
@@ -30,7 +45,17 @@
     },
     "plugins": [
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#274C77",
+          "sounds": [],
+          "androidMode": "default",
+          "androidCollapsedTitle": "Zentrix"
+        }
+      ]
     ]
   }
 }
