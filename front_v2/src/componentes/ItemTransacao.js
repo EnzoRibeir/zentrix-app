@@ -36,7 +36,11 @@ const ItemTransacao = ({ transacao, aoClicar, mostrarBadge = true }) => {
   const categoria = obterCategoria(transacao.category);
   const tipoPagamento = CORES_TIPO_PAGAMENTO[transacao.type] || CORES_TIPO_PAGAMENTO['Débito'];
   const ehReceita = transacao.type === 'Emprestado';
-  const valor = parseFloat(transacao.amount || 0);
+  
+  const parcelas = parseInt(transacao.installments_total || 1, 10);
+  const ehParcelado = (transacao.type === 'Crédito Parcelado' || transacao.type === 'Emprestado') && parcelas > 1;
+  const valorTotal = parseFloat(transacao.amount || 0);
+  const valorMensal = ehParcelado ? valorTotal / parcelas : valorTotal;
 
   return (
     <TouchableOpacity
@@ -60,7 +64,7 @@ const ItemTransacao = ({ transacao, aoClicar, mostrarBadge = true }) => {
         {mostrarBadge && (
           <View style={[estilos.badge, { backgroundColor: tipoPagamento.corFundo }]}>
             <Text style={[estilos.badgeTexto, { color: tipoPagamento.cor }]}>
-              {tipoPagamento.texto}
+              {ehParcelado ? `${tipoPagamento.texto} (${parcelas}x)` : tipoPagamento.texto}
             </Text>
           </View>
         )}
@@ -74,8 +78,11 @@ const ItemTransacao = ({ transacao, aoClicar, mostrarBadge = true }) => {
             { color: ehReceita ? CORES_SEMANTICAS.sucesso : CORES_SEMANTICAS.erro },
           ]}
         >
-          {ehReceita ? '+' : '-'}{formatarMoeda(valor)}
+          {ehReceita ? '+' : '-'}{formatarMoeda(valorMensal)}
         </Text>
+        {ehParcelado && (
+          <Text style={estilos.textoParcelas}>Total: {formatarMoeda(valorTotal)}</Text>
+        )}
         <Text style={estilos.horario}>{formatarHora(transacao.created_at)}</Text>
       </View>
 
@@ -138,6 +145,12 @@ const criarEstilos = (CORES) => StyleSheet.create({
   valor: {
     ...TIPOGRAFIA.corpoPequeno,
     fontWeight: '600',
+  },
+  textoParcelas: {
+    ...TIPOGRAFIA.legenda,
+    color: CORES.textoSecundario,
+    marginTop: 2,
+    fontSize: 10,
   },
   horario: {
     ...TIPOGRAFIA.legenda,

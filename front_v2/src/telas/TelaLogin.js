@@ -22,8 +22,11 @@ import * as WebBrowser from 'expo-web-browser';
 
 import { useTema } from '../contextos/TemaContexto';
 import { TIPOGRAFIA } from '../constantes/tipografia';
+import { GRADIENTES } from '../constantes/cores';
 import { useAuth } from '../contextos/AuthContexto';
 import * as Linking from 'expo-linking';
+
+const URL_BASE = 'https://agog0k90kc.execute-api.sa-east-1.amazonaws.com/default/api-financas-ia';
 
 // Permite que o WebBrowser retorne ao app corretamente após login
 WebBrowser.maybeCompleteAuthSession();
@@ -74,16 +77,15 @@ export default function TelaLogin({ navigation }) {
   }, [tentouAutoLogin]);
 
   /**
-   * Processa a URL de callback retornada pelo backend.
-   * O backend já validou o hash e criou o usuário.
-   * A URL contém: token_sessao, user_id_interno, nome
+   * SEC03: Processa o deep link de callback.
+   * O backend agora envia auth_code (temporário) em vez do token real na URL.
+   * Trocamos o auth_code pelo token_sessao real via GET seguro.
    */
   const processarCallback = async (url) => {
     try {
       const urlObj = new URL(url);
       const params = Object.fromEntries(urlObj.searchParams.entries());
 
-      // Verifica se houve erro no backend
       if (params.error) {
         const mensagens = {
           'hash_invalido': 'Falha na verificação de segurança. Tente novamente.',
@@ -93,20 +95,35 @@ export default function TelaLogin({ navigation }) {
         throw new Error(mensagens[params.error] || 'Erro na autenticação.');
       }
 
-      // Verifica se os dados essenciais estão presentes
-      if (!params.token_sessao || !params.user_id_interno) {
+      const authCode     = params.auth_code;
+      const userIdInterno = params.user_id_interno;
+      const nome         = params.nome || 'Usuário';
+
+      if (!authCode || !userIdInterno) {
         throw new Error('Resposta de autenticação incompleta.');
       }
 
-      // O backend já validou tudo — salva a sessão direto
-      const dadosSessao = {
-        login: true,
-        token_sessao: params.token_sessao,
-        user_id_interno: params.user_id_interno,
-        nome: params.nome || 'Usuário',
-      };
+      // SEC03: Troca o código temporário pelo token real via GET (não expõe token em URL)
+      const resposta = await fetch(`${URL_BASE}?action=trocar-codigo&code=${authCode}`);
+      if (!resposta.ok) {
+        const errBody = await resposta.json().catch(() => ({}));
+        throw new Error(errBody.erro || 'Falha ao obter token de sessão.');
+      }
 
-      const sucesso = await login(dadosSessao);
+      const dadosToken = await resposta.json();
+      const tokenSessao = dadosToken.token_sessao;
+
+      if (!tokenSessao) {
+        throw new Error('Token de sessão não recebido.');
+      }
+
+      const sucesso = await login({
+        login: true,
+        token_sessao: tokenSessao,
+        user_id_interno: userIdInterno,
+        nome,
+      });
+
       if (sucesso) {
         navigation.replace('Principal');
       } else {

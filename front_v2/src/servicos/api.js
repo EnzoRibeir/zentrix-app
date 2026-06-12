@@ -29,8 +29,14 @@ const URL_BASE = 'https://agog0k90kc.execute-api.sa-east-1.amazonaws.com/default
 const TIMEOUT_MS = 15000;
 
 // ===========================================
-// FUNÇÕES AUXILIARES
+// FUNÇÕES AUXILIARES E ESTADO GLOBAL
 // ===========================================
+
+let globalTokenSessao = null;
+
+export const setTokenSessaoAPI = (token) => {
+  globalTokenSessao = token;
+};
 
 /**
  * Wrapper para fetch com timeout.
@@ -45,9 +51,15 @@ const fetchComTimeout = async (url, opcoes = {}) => {
   const controlador = new AbortController();
   const idTimeout = setTimeout(() => controlador.abort(), TIMEOUT_MS);
 
+  const headers = opcoes.headers || {};
+  if (globalTokenSessao) {
+    headers['Authorization'] = `Bearer ${globalTokenSessao}`;
+  }
+
   try {
     const resposta = await fetch(url, {
       ...opcoes,
+      headers,
       signal: controlador.signal,
     });
     clearTimeout(idTimeout);

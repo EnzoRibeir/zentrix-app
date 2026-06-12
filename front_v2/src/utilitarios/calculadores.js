@@ -5,144 +5,123 @@
  * 
  * Funções que processam a lista de transações e geram
  * dados agregados para os gráficos e cards de resumo.
- * 
- * Todas as funções recebem a lista de transações e retornam
- * dados calculados. Não fazem chamadas à API.
  */
 
 import { CORES_CATEGORIAS } from '../constantes/cores';
-import { MAPA_CATEGORIAS } from '../constantes/categorias';
+
+/**
+ * Função central para calcular qual o valor da transação no MÊS ATUAL.
+ * 
+ * - Débito / Crédito à Vista: 
+ *     Se for do mês atual -> valor total
+ *     Se for de outro mês -> 0
+ * 
+ * - Crédito Parcelado / Emprestado:
+ *     Se a diferença de meses entre hoje e a compra for >= 0 e < num_parcelas -> valor / num_parcelas
+ *     Senão -> 0
+ */
+export const obterValorNoMesAtual = (transacao) => {
+  const agora = new Date();
+  const dataTransacao = new Date(transacao.created_at);
+  const valorTotal = parseFloat(transacao.amount || 0);
+  
+  // Meses de diferença (ex: se comprou mês passado e hoje é este mês = 1)
+  const diffMeses = (agora.getFullYear() - dataTransacao.getFullYear()) * 12 
+                    + (agora.getMonth() - dataTransacao.getMonth());
+
+  const parcelas = parseInt(transacao.installments_total || 1, 10);
+  const tipo = transacao.type;
+
+  // Parcelados e Empréstimos
+  if ((tipo === 'Crédito Parcelado' || tipo === 'Emprestado') && parcelas > 1) {
+    if (diffMeses >= 0 && diffMeses < parcelas) {
+      return valorTotal / parcelas;
+    }
+    return 0; // Já acabou de pagar ou é uma data no futuro
+  }
+
+  // À vista / Débito (só contam no mês exato da compra)
+  if (diffMeses === 0) {
+    return valorTotal;
+  }
+
+  return 0;
+};
 
 // ===========================================
 // CÁLCULOS DE TOTAIS
 // ===========================================
 
-/**
- * Calcula o total gasto (soma de todas as transações do tipo despesa).
- * Tipos de despesa: "Débito", "Crédito à Vista", "Crédito Parcelado"
- * 
- * @param {Array} transacoes - Lista de transações do backend
- * @returns {number} Soma total dos gastos
- */
 export const calcularTotalGasto = (transacoes) => {
   return transacoes
     .filter((t) => t.type !== 'Emprestado')
-    .reduce((soma, t) => soma + parseFloat(t.amount || 0), 0);
+    .reduce((soma, t) => soma + obterValorNoMesAtual(t), 0);
 };
 
-/**
- * Calcula o total recebido/a receber (transações do tipo "Emprestado").
- * 
- * @param {Array} transacoes - Lista de transações
- * @returns {number} Soma total dos valores a receber
- */
 export const calcularTotalRecebido = (transacoes) => {
   return transacoes
     .filter((t) => t.type === 'Emprestado')
-    .reduce((soma, t) => soma + parseFloat(t.amount || 0), 0);
+    .reduce((soma, t) => soma + obterValorNoMesAtual(t), 0);
 };
 
-/**
- * Calcula o saldo do período (recebido - gasto).
- * 
- * @param {Array} transacoes - Lista de transações
- * @returns {number} Saldo do período
- */
 export const calcularSaldo = (transacoes) => {
-  const recebido = calcularTotalRecebido(transacoes);
-  const gasto = calcularTotalGasto(transacoes);
-  return recebido - gasto;
+  return calcularTotalRecebido(transacoes) - calcularTotalGasto(transacoes);
 };
 
-/**
- * Calcula a média diária de gastos no período.
- * Considera o número de dias entre a primeira e última transação.
- * 
- * @param {Array} transacoes - Lista de transações
- * @returns {number} Média diária de gastos
- */
 export const calcularMediaDiaria = (transacoes) => {
-  const despesas = transacoes.filter((t) => t.type !== 'Emprestado');
-  if (despesas.length === 0) return 0;
-
-  const total = calcularTotalGasto(transacoes);
-
-  // Calcula o número de dias no período
-  const datas = despesas.map((t) => new Date(t.created_at).getTime());
-  const primeiraData = Math.min(...datas);
-  const ultimaData = Math.max(...datas);
-  const diasNoPeriodo = Math.max(1, Math.ceil((ultimaData - primeiraData) / (1000 * 60 * 60 * 24)));
-
-  return total / diasNoPeriodo;
+  const hoje = new Date();
+  const diaAtual = Math.max(1, hoje.getDate());
+  const totalGasto = calcularTotalGasto(transacoes);
+  
+  // Média é o quanto gastou no mês dividido pelo dia atual do mês
+  return totalGasto / diaAtual;
 };
 
 // ===========================================
-// CÁLCULOS POR CATEGORIA (para gráfico de rosca)
+// CÁLCULOS POR CATEGORIA
 // ===========================================
 
-/**
- * Agrupa os gastos por categoria e calcula valor total e porcentagem de cada uma.
- * Usado para alimentar o gráfico de rosca (donut chart).
- * 
- * @param {Array} transacoes - Lista de transações
- * @returns {Array<{nome, valor, porcentagem, cor}>} Categorias com seus totais
- * 
- * @example
- * // Retorno:
- * [
- *   { nome: "Compras e Mimos", valor: 380, porcentagem: 43.2, cor: "#E74C3C" },
- *   { nome: "A receber", valor: 500, porcentagem: 56.8, cor: "#2E7D32" },
- * ]
- */
 export const calcularGastosPorCategoria = (transacoes) => {
-  // Agrupa valores por categoria
   const agrupado = {};
-  transacoes.forEach((t) => {
-    const categoria = t.category || 'Outros';
-    const valor = parseFloat(t.amount || 0);
-    agrupado[categoria] = (agrupado[categoria] || 0) + valor;
-  });
+  
+  transacoes
+    .filter((t) => t.type !== 'Emprestado')
+    .forEach((t) => {
+      const valorNoMes = obterValorNoMesAtual(t);
+      if (valorNoMes > 0) {
+        const categoria = t.category || 'Outros';
+        agrupado[categoria] = (agrupado[categoria] || 0) + valorNoMes;
+      }
+    });
 
-  // Calcula o total geral para calcular porcentagens
   const totalGeral = Object.values(agrupado).reduce((soma, v) => soma + v, 0);
 
-  // Converte para array e calcula porcentagem
-  const resultado = Object.entries(agrupado)
+  return Object.entries(agrupado)
     .map(([nome, valor]) => ({
       nome,
       valor,
       porcentagem: totalGeral > 0 ? (valor / totalGeral) * 100 : 0,
       cor: CORES_CATEGORIAS[nome] || CORES_CATEGORIAS['Outros'],
     }))
-    .sort((a, b) => b.valor - a.valor); // Ordena por valor (maior primeiro)
-
-  return resultado;
+    .sort((a, b) => b.valor - a.valor);
 };
 
 // ===========================================
 // CÁLCULOS PARA GRÁFICO DE EVOLUÇÃO
 // ===========================================
 
-/**
- * Calcula a evolução acumulada de gastos ao longo do mês.
- * Retorna dados para o gráfico de linha.
- * 
- * @param {Array} transacoes - Lista de transações
- * @returns {object} Dados para o gráfico { labels: string[], valores: number[] }
- * 
- * @example
- * // Retorno:
- * {
- *   labels: ["01/05", "08/05", "15/05", "22/05"],
- *   valores: [80, 330, 580, 880]
- * }
- */
 export const calcularEvolucaoGastos = (transacoes) => {
-  const despesas = transacoes
+  // Pega apenas as que têm valor no mês atual (exclui meses passados)
+  const despesasDoMes = transacoes
     .filter((t) => t.type !== 'Emprestado')
+    .map(t => ({
+      ...t,
+      valorMes: obterValorNoMesAtual(t)
+    }))
+    .filter(t => t.valorMes > 0)
     .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
 
-  if (despesas.length === 0) {
+  if (despesasDoMes.length === 0) {
     return { labels: [], valores: [] };
   }
 
@@ -150,9 +129,10 @@ export const calcularEvolucaoGastos = (transacoes) => {
   const valores = [];
   let acumulado = 0;
 
-  despesas.forEach((t) => {
-    acumulado += parseFloat(t.amount || 0);
+  despesasDoMes.forEach((t) => {
+    acumulado += t.valorMes;
     const data = new Date(t.created_at);
+    // Transações parceladas caem no dia original da compra. Se quiser no dia 1, a lógica seria outra.
     const label = `${data.getDate().toString().padStart(2, '0')}/${(data.getMonth() + 1).toString().padStart(2, '0')}`;
     labels.push(label);
     valores.push(acumulado);
@@ -165,13 +145,6 @@ export const calcularEvolucaoGastos = (transacoes) => {
 // FILTROS DE TRANSAÇÕES
 // ===========================================
 
-/**
- * Filtra transações por tipo: "todas", "entradas" ou "saidas".
- * 
- * @param {Array} transacoes - Lista de transações
- * @param {string} filtro - Tipo de filtro: "todas" | "entradas" | "saidas"
- * @returns {Array} Transações filtradas
- */
 export const filtrarPorTipo = (transacoes, filtro) => {
   switch (filtro) {
     case 'entradas':
@@ -183,31 +156,13 @@ export const filtrarPorTipo = (transacoes, filtro) => {
   }
 };
 
-/**
- * Filtra transações por categoria.
- * 
- * @param {Array} transacoes - Lista de transações
- * @param {string} categoria - Nome da categoria (ou "todas")
- * @returns {Array} Transações filtradas
- */
 export const filtrarPorCategoria = (transacoes, categoria) => {
   if (categoria === 'todas' || !categoria) return transacoes;
   return transacoes.filter((t) => t.category === categoria);
 };
 
-/**
- * Filtra transações pelo mês atual.
- * 
- * @param {Array} transacoes - Lista de transações
- * @returns {Array} Transações do mês atual
- */
 export const filtrarMesAtual = (transacoes) => {
-  const agora = new Date();
-  const mesAtual = agora.getMonth();
-  const anoAtual = agora.getFullYear();
-
-  return transacoes.filter((t) => {
-    const data = new Date(t.created_at);
-    return data.getMonth() === mesAtual && data.getFullYear() === anoAtual;
-  });
+  // Mantemos o conceito de "transação impacta o mês atual" (seja à vista ou parcelado)
+  return transacoes.filter((t) => obterValorNoMesAtual(t) > 0);
 };
+

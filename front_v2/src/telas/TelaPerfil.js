@@ -34,17 +34,6 @@ const LIMITE_PADRAO = 1000;
 /** Salário padrão se não definido */
 const SALARIO_PADRAO = 5000;
 
-/**
- * Dados mockados do perfil do usuário.
- * TODO: Futuramente virão de um endpoint GET /perfil no backend.
- */
-const PERFIL_MOCKADO = {
-  nome: 'Enzo Ribeiro',
-  email: 'enzodesenveloper@gmail.com',
-  dataNascimento: '02, abr 2006',
-  telefone: '(11) 4002-8922',
-  localizacao: 'São Paulo, SP',
-};
 
 /**
  * Tela de perfil do usuário com configurações.
@@ -152,30 +141,6 @@ const TelaPerfil = ({ navigation }) => {
         <Feather name="chevron-right" size={24} color={CORES.textoSecundario} />
       </TouchableOpacity>
 
-      {/* Dados pessoais em linha */}
-      <View style={estilos.dadosPessoais}>
-        <View style={estilos.dadoItem}>
-          <Feather name="calendar" size={16} color={CORES.textoSecundario} />
-          <View style={estilos.dadoItemTexto}>
-            <Text style={estilos.dadoLabel}>Data de Nascimento</Text>
-            <Text style={estilos.dadoValor}>{PERFIL_MOCKADO.dataNascimento}</Text>
-          </View>
-        </View>
-        <View style={estilos.dadoItem}>
-          <Feather name="phone" size={16} color={CORES.textoSecundario} />
-          <View style={estilos.dadoItemTexto}>
-            <Text style={estilos.dadoLabel}>Telefone</Text>
-            <Text style={estilos.dadoValor}>{PERFIL_MOCKADO.telefone}</Text>
-          </View>
-        </View>
-        <View style={estilos.dadoItem}>
-          <Feather name="map-pin" size={16} color={CORES.textoSecundario} />
-          <View style={estilos.dadoItemTexto}>
-            <Text style={estilos.dadoLabel}>Localização</Text>
-            <Text style={estilos.dadoValor}>{PERFIL_MOCKADO.localizacao}</Text>
-          </View>
-        </View>
-      </View>
 
       {/* ============================================ */}
       {/* SEÇÃO: Resumo da Conta (4 cards) */}
@@ -338,17 +303,7 @@ const criarEstilos = (CORES, insets) => StyleSheet.create({
   cardUsuarioInfo: { flex: 1 },
   nomeUsuario: { ...TIPOGRAFIA.subtitulo, color: CORES.textoPrincipal, marginBottom: 4 },
   emailUsuario: { ...TIPOGRAFIA.legenda, color: CORES.textoSecundario },
-  /* Dados pessoais */
-  dadosPessoais: {
-    backgroundColor: CORES.branco, borderRadius: ESPACAMENTOS.raioBorda,
-    padding: ESPACAMENTOS.paddingCard, flexDirection: 'row', justifyContent: 'space-between',
-    marginBottom: ESPACAMENTOS.espacoEntreCards,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
-  },
-  dadoItem: { alignItems: 'center', flex: 1 },
-  dadoItemTexto: { alignItems: 'center', marginTop: 6 },
-  dadoLabel: { ...TIPOGRAFIA.legenda, color: CORES.textoSecundario, fontSize: 10, textAlign: 'center' },
-  dadoValor: { ...TIPOGRAFIA.legenda, color: CORES.textoPrincipal, textAlign: 'center', marginTop: 2 },
+
   /* Seções */
   secaoTitulo: { ...TIPOGRAFIA.subtitulo, color: CORES.textoPrincipal, marginBottom: 12, marginTop: 16 },
   gridResumo: { flexDirection: 'row' },
